@@ -1,0 +1,15 @@
+{
+  "name": "Inspeção Porta-Pallet",
+  "short_name": "Inspeção PP",
+  "description": "Inspeção estrutural de porta-pallets — funciona offline, salva no aparelho",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EEF0F1",
+  "theme_color": "#1C2128",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
