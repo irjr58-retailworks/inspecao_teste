@@ -286,7 +286,9 @@ function render() {
     home: "Início", vistoria: "Inspeção", estrutura: (estAtual && estAtual.codigo) || "Nova estrutura",
     montante: montAtual ? "Montante Nº " + montAtual.numero : "Montante",
     history: "Histórico", parts: "Lista de peças", config: "Configurações",
+    hub: (state.vistorias.find((v) => v.id === state.activeVistoriaId) || {}).lojaCd || "Inspeção",
     report: (state.vistorias.find((v) => v.id === state.activeVistoriaId) || {}).lojaCd || "Relatório",
+    partsInspection: "Lista de peças",
     anomalias: "Relatório de Anomalias",
   };
   const backTargets = {
@@ -296,7 +298,9 @@ function render() {
     history: () => go("home"),
     parts: () => go("home"),
     config: () => go("home"),
-    report: () => go("history"),
+    hub: () => go("history"),
+    report: () => go("hub", state.activeVistoriaId),
+    partsInspection: () => go("hub", state.activeVistoriaId),
     anomalias: () => go("report", state.activeVistoriaId),
   };
   app.appendChild(TopBar(titles[state.screen], state.screen !== "home" ? backTargets[state.screen] : null));
@@ -309,7 +313,9 @@ function render() {
   if (state.screen === "history") body.appendChild(HistoryScreen());
   if (state.screen === "parts") body.appendChild(PartsScreen());
   if (state.screen === "config") body.appendChild(ConfigScreen());
+  if (state.screen === "hub") body.appendChild(InspectionHubScreen());
   if (state.screen === "report") body.appendChild(ReportScreen());
+  if (state.screen === "partsInspection") body.appendChild(PartsInspectionScreen());
   if (state.screen === "anomalias") body.appendChild(AnomaliasScreen());
   app.appendChild(body);
   app.appendChild(BottomNav());
@@ -328,7 +334,7 @@ function BottomNav() {
   ];
   const nav = el("div", { class: "bottomnav no-print" });
   items.forEach(([id, label, icon]) => {
-    const active = id === state.screen || (id === "vistoria" && (state.screen === "estrutura" || state.screen === "montante"));
+    const active = id === state.screen || (id === "vistoria" && (state.screen === "estrutura" || state.screen === "montante")) || (id === "history" && ["hub", "report", "partsInspection", "anomalias"].includes(state.screen));
     const btn = el("button", { class: active ? "active" : "", onclick: () => go(id === "vistoria" ? "vistoria" : id) },
       el("span", { html: svg(icon, 20) }), el("span", { class: "label" }, label));
     nav.appendChild(btn);
@@ -431,7 +437,7 @@ function VistoriaRow(v, isDraft) {
           return b;
         })())
     : Tag(vistoriaStatus(v), "sm");
-  const row = el("div", { class: "insp-row", onclick: () => go(isDraft ? "vistoria" : "report", v.id) },
+  const row = el("div", { class: "insp-row", onclick: () => go(isDraft ? "vistoria" : "hub", v.id) },
     el("div", {},
       el("div", { class: "insp-code" }, v.lojaCd || "(sem Loja/CD ainda)"),
       el("div", { class: "insp-sub" }, (v.local ? v.local + " · " : "") + nEst + " estrutura" + (nEst === 1 ? "" : "s") + (v.inspetor ? " · " + v.inspetor : "")),
@@ -857,6 +863,171 @@ function HistoryScreen() {
 }
 
 /* ---------------- Relatório ---------------- */
+/* ---------------- Geração de PDF sob demanda (para o envio por e-mail) ---------------- */
+let jsPdfLoadPromise = null;
+function loadJsPdf() {
+  if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve(window.jspdf.jsPDF);
+  if (jsPdfLoadPromise) return jsPdfLoadPromise;
+  jsPdfLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+    script.onload = () => resolve(window.jspdf.jsPDF);
+    script.onerror = () => reject(new Error("Não foi possível carregar o gerador de PDF (precisa de internet na primeira vez)."));
+    document.head.appendChild(script);
+  });
+  return jsPdfLoadPromise;
+}
+function imageUrlToDataUrl(url) {
+  return fetch(url).then((r) => r.blob()).then((blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  }));
+}
+async function buildInspectionPdf(v) {
+  const jsPDF = await loadJsPdf();
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const marginX = 40;
+  let y = 40;
+
+  function ensureSpace(h) {
+    if (y + h > pageH - 40) { doc.addPage(); y = 40; }
+  }
+  function text(str, size, opts) {
+    opts = opts || {};
+    doc.setFontSize(size);
+    doc.setFont(undefined, opts.bold ? "bold" : "normal");
+    doc.setTextColor(opts.color || "#1C2128");
+    const maxWidth = pageW - marginX * 2;
+    const lines = doc.splitTextToSize(String(str), maxWidth);
+    ensureSpace(lines.length * (size * 1.3));
+    doc.text(lines, marginX, y);
+    y += lines.length * (size * 1.3) + (opts.gap || 4);
+  }
+
+  try {
+    const logoData = await imageUrlToDataUrl("logo-full.png");
+    doc.addImage(logoData, "PNG", marginX, y, 110, 110 * (192 / 545));
+    y += 110 * (192 / 545) + 14;
+  } catch (e) { /* segue sem logo se não conseguir carregar */ }
+
+  text(v.lojaCd || "Inspeção", 18, { bold: true, gap: 2 });
+  text([v.local, (v.estruturas || []).length + " estrutura(s)", "Inspetor(es): " + (v.inspetor || "—"), fmtDateOnly(v.data), v.versao || ""].filter(Boolean).join("  ·  "), 10, { color: "#5B6470", gap: 16 });
+
+  (v.estruturas || []).forEach((e) => {
+    ensureSpace(30);
+    text(`Estrutura ${e.codigo || "—"}`, 13, { bold: true, gap: 2 });
+    const sub = [e.setor, e.tipoEstrutura, e.rua && "Rua " + e.rua, e.lado && "Lado " + e.lado, e.fabricante].filter(Boolean).join("  ·  ");
+    if (sub) text(sub, 9, { color: "#9AA2AC", gap: 8 });
+
+    const problemEntries = (e.montantes || []).flatMap((m) => m.itens.filter((i) => isProblem(i.status)).map((i) => ({ m, i })));
+    if (!problemEntries.length) {
+      text("Nenhum apontamento — todos os montantes conformes.", 10, { color: "#5B6470", gap: 12 });
+      return;
+    }
+    for (const { m, i } of problemEntries) {
+      ensureSpace(50);
+      text(`${i.codigo ? "[" + i.codigo + "] " : ""}${i.nome}  —  Montante Nº ${m.numero}`, 10.5, { bold: true, gap: 2 });
+      const details = [i.descTxt && "Descrição: " + i.descTxt, i.tipoTxt && "Tipo: " + i.tipoTxt, i.localTxt && "Localização: " + i.localTxt, i.grauTxt && "Grau: " + i.grauTxt, i.corte && "Nível: " + i.corte, i.qtd && "Qtd: " + i.qtd].filter(Boolean).join("  ·  ");
+      if (details) text(details, 9, { color: "#5B6470", gap: 2 });
+      if (i.obs) text("Obs: " + i.obs, 9, { color: "#5B6470", gap: 4 });
+      if (i.foto) {
+        try {
+          ensureSpace(110);
+          doc.addImage(i.foto, "JPEG", marginX, y, 100, 100);
+          y += 108;
+        } catch (e) { /* ignora foto que falhar */ }
+      }
+      y += 6;
+    }
+  });
+
+  const partsRows = buildPartsForVistoria(v);
+  if (partsRows.length) {
+    ensureSpace(30);
+    text("Lista de peças", 13, { bold: true, gap: 6 });
+    partsRows.forEach((r) => {
+      ensureSpace(16);
+      text(`${r.peca}  —  x${r.qtd}${r.graus.size ? "  (" + [...r.graus].join(", ") + ")" : ""}`, 10, { gap: 2 });
+    });
+  }
+
+  return doc.output("blob");
+}
+
+
+function InspectionHubScreen() {
+  const wrap = el("div", { class: "screen" });
+  const v = state.vistorias.find((x) => x.id === state.activeVistoriaId);
+  if (!v) { wrap.appendChild(el("div", { class: "empty" }, "Inspeção não encontrada.")); return wrap; }
+  const st = vistoriaStatus(v);
+
+  wrap.appendChild(el("div", { style: "margin-bottom:16px" },
+    el("div", { style: "font-family:'Oswald',sans-serif;font-size:22px;font-weight:700" }, v.lojaCd),
+    el("div", { style: "font-size:13px;color:var(--ink-soft);margin-top:2px" }, [v.local, (v.estruturas || []).length + " estrutura(s)", fmtDateOnly(v.data)].filter(Boolean).join(" · ")),
+    el("div", { style: "margin-top:8px" }, Tag(st))));
+
+  function hubCard(icon, title, subtitle, onClick) {
+    const card = Card({ style: "padding:16px;cursor:pointer;margin-bottom:10px", class: "" });
+    card.addEventListener("click", onClick);
+    card.appendChild(el("div", { style: "display:flex;align-items:center;gap:12px" },
+      el("div", { style: "background:var(--bg);border-radius:10px;padding:10px;display:flex", html: svg(icon, 22) }),
+      el("div", { style: "flex:1" },
+        el("div", { style: "font-weight:700;font-size:15px" }, title),
+        el("div", { style: "font-size:12px;color:var(--ink-faint);margin-top:2px" }, subtitle)),
+      el("span", { html: svg("chevronRight", 18), style: "color:var(--ink-faint)" })));
+    return card;
+  }
+
+  wrap.appendChild(hubCard("download", "Relatório da inspeção", "Detalhado, com fotos — baixar em PDF", () => go("report", v.id)));
+  wrap.appendChild(hubCard("package", "Lista de peças", "Peças necessárias desta inspeção, por local", () => go("partsInspection", v.id)));
+  wrap.appendChild(hubCard("share", "Enviar por e-mail", "Monta os arquivos e abre o compartilhar do celular", () => sendInspectionByEmail(v)));
+
+  return wrap;
+}
+async function sendInspectionByEmail(v) {
+  try {
+    const files = [];
+    const anomaliaRows = buildAnomaliaRows(v);
+    if (anomaliaRows.length) {
+      const csvAnom = buildAnomaliasCsvContent(v, anomaliaRows);
+      files.push(new File([csvAnom], `relatorio-anomalias-${slug(v.lojaCd)}.csv`, { type: "text/csv" }));
+    }
+    const partsRows = buildPartsForVistoria(v);
+    if (partsRows.length) {
+      const csvParts = buildPartsCsvContent(v, partsRows);
+      files.push(new File([csvParts], `lista-pecas-${slug(v.lojaCd)}.csv`, { type: "text/csv" }));
+    }
+    let pdfOk = false;
+    try {
+      const pdfBlob = await buildInspectionPdf(v);
+      files.push(new File([pdfBlob], `relatorio-${slug(v.lojaCd)}.pdf`, { type: "application/pdf" }));
+      pdfOk = true;
+    } catch (e) { console.error("Falha ao gerar PDF", e); }
+
+    const shareData = { title: `Relatório — ${v.lojaCd}`, text: `Relatório de inspeção — ${v.lojaCd}${v.local ? ", " + v.local : ""} — ${fmtDateOnly(v.data)}`, files };
+    if (navigator.canShare && navigator.canShare({ files }) ) {
+      await navigator.share(shareData);
+    } else if (navigator.share) {
+      // sem suporte a arquivos: baixa tudo e compartilha só o texto
+      files.forEach((f) => download(f.name, f, f.type));
+      await navigator.share({ title: shareData.title, text: shareData.text + "\n\n(Os arquivos foram baixados no aparelho — anexe manualmente ao e-mail.)" });
+    } else {
+      files.forEach((f) => download(f.name, f, f.type));
+      alert("Os arquivos foram baixados no aparelho. Anexe-os manualmente no seu app de e-mail.");
+    }
+    if (!pdfOk) alert("O PDF não pôde ser gerado agora (precisa de internet na primeira vez, para carregar o gerador). Os CSVs foram incluídos normalmente.");
+  } catch (e) {
+    if (e && e.name === "AbortError") return; // usuário cancelou o compartilhamento
+    console.error(e);
+    alert("Não foi possível preparar os arquivos para envio.");
+  }
+}
+function slug(s) { return String(s || "inspecao").toLowerCase().replace(/[^a-z0-9]+/g, "-"); }
+
 function ReportScreen() {
   const wrap = el("div", {});
   const v = state.vistorias.find((x) => x.id === state.activeVistoriaId);
@@ -985,8 +1156,7 @@ function csvEscape(val) {
   const s = String(val === null || val === undefined ? "" : val);
   return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
-function exportAnomaliasCsv(v) {
-  const rows = buildAnomaliaRows(v);
+function buildAnomaliasCsvContent(v, rows) {
   const header = ["SETOR", "TIPO ESTRUTURA", "Nº ESTRUTURA", "LADO/POSIÇÃO", "MONTANTE", "NÍVEL", "ANOMALIA (CÓD.)", "ANOMALIA (DESCRIÇÃO)", "DESCRIÇÃO", "TIPO", "LOCALIZAÇÃO", "GRAU", "CATEGORIA", "CORREÇÃO", "QTD.", "FABRICANTE"];
   const lines = [
     "RELATÓRIO DE ANOMALIAS",
@@ -996,7 +1166,12 @@ function exportAnomaliasCsv(v) {
     header.join(";"),
     ...rows.map((r) => [r.setor, r.tipoEstrutura, r.numeroEstrutura, r.lado, r.montante, r.corte, r.codigoAnomalia, r.nomeAnomalia, r.descricao, r.tipo, r.localizacao, r.grau, r.categoria, r.correcao, r.qtd, r.fabricante].map(csvEscape).join(";")),
   ];
-  download(`relatorio-anomalias-${(v.lojaCd || "inspecao").replace(/[^a-z0-9]+/gi, "-")}-${todayStr()}.csv`, "\uFEFF" + lines.join("\n"), "text/csv;charset=utf-8");
+  return "\uFEFF" + lines.join("\n");
+}
+function exportAnomaliasCsv(v) {
+  const rows = buildAnomaliaRows(v);
+  const content = buildAnomaliasCsvContent(v, rows);
+  download(`relatorio-anomalias-${slug(v.lojaCd)}-${todayStr()}.csv`, content, "text/csv;charset=utf-8");
 }
 function AnomaliasScreen() {
   const wrap = el("div", { class: "screen" });
@@ -1061,6 +1236,64 @@ function AnomaliasScreen() {
 }
 
 /* ---------------- Peças ---------------- */
+function buildPartsForVistoria(v) {
+  const bucket = {};
+  (v.estruturas || []).filter((e) => !e.resolvido && isProblem(estruturaStatus(e))).forEach((e) => {
+    (e.montantes || []).forEach((m) => {
+      m.itens.filter((i) => isProblem(i.status)).forEach((i) => {
+        const q = Number(i.qtd) > 0 ? Number(i.qtd) : 1;
+        const peca = pecaDoItem(i);
+        if (!bucket[peca]) bucket[peca] = { peca, qtd: 0, graus: new Set(), refs: new Set() };
+        bucket[peca].qtd += q;
+        if (i.grauTxt) bucket[peca].graus.add(i.grauTxt);
+        bucket[peca].refs.add(`${e.codigo} · Montante ${m.numero}`);
+      });
+    });
+  });
+  return Object.values(bucket);
+}
+function buildPartsCsvContent(v, rows) {
+  const header = ["LOJA/CD", "LOCAL", "PEÇA", "QUANTIDADE", "GRAU", "ESTRUTURAS / MONTANTES"];
+  const lines = ["LISTA DE PEÇAS", `${v.lojaCd}${v.local ? ", " + v.local : ""}`, "", header.join(";")];
+  rows.forEach((r) => {
+    lines.push([v.lojaCd, v.local || "", r.peca, r.qtd, [...r.graus].join(" · "), [...r.refs].join(" · ")].map(csvEscape).join(";"));
+  });
+  return "\uFEFF" + lines.join("\n");
+}
+function PartsInspectionScreen() {
+  const wrap = el("div", { class: "screen" });
+  const v = state.vistorias.find((x) => x.id === state.activeVistoriaId);
+  if (!v) { wrap.appendChild(el("div", { class: "empty" }, "Inspeção não encontrada.")); return wrap; }
+
+  wrap.appendChild(el("div", { style: "margin-bottom:14px" },
+    el("div", { style: "font-family:'Oswald',sans-serif;font-size:18px;font-weight:700" }, v.lojaCd),
+    el("div", { style: "font-size:13px;color:var(--ink-soft);margin-top:2px" }, [v.local, fmtDateOnly(v.data)].filter(Boolean).join(" · "))));
+
+  const rows = buildPartsForVistoria(v);
+  if (!rows.length) {
+    wrap.appendChild(el("div", { class: "card empty" }, el("div", { html: svg("package", 26, "margin:0 auto 8px;opacity:.5;display:block") }), "Nenhuma peça pendente nesta inspeção."));
+    return wrap;
+  }
+
+  const exportBtn = el("button", { class: "ghost-btn", style: "width:100%;padding:12px;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px" },
+    el("span", { html: svg("download", 16) }), "Exportar CSV");
+  exportBtn.addEventListener("click", () => download(`lista-pecas-${slug(v.lojaCd)}.csv`, buildPartsCsvContent(v, rows), "text/csv;charset=utf-8"));
+  wrap.appendChild(exportBtn);
+
+  const list = el("div", { style: "display:flex;flex-direction:column;gap:8px" });
+  rows.forEach((r) => {
+    const card = Card({ style: "padding:12px" });
+    card.appendChild(el("div", { style: "display:flex;justify-content:space-between;gap:8px" },
+      el("div", {}, el("div", { style: "font-weight:700;font-size:14px" }, r.peca), el("div", { style: "font-size:11.5px;color:var(--ink-faint);margin-top:2px" }, [...r.refs].join(" · "))),
+      el("div", { style: "display:flex;flex-direction:column;align-items:flex-end;gap:4px" },
+        el("span", { class: "mono", style: "font-size:13px;font-weight:700" }, "x" + r.qtd),
+        r.graus.size ? el("span", { style: "font-size:11px;color:var(--amber-dark);font-weight:600" }, [...r.graus].join(" · ")) : null)));
+    list.appendChild(card);
+  });
+  wrap.appendChild(list);
+  return wrap;
+}
+
 function buildPartsByLocation() {
   const locations = {};
   state.vistorias.filter((v) => v.finalizada).forEach((v) => {
