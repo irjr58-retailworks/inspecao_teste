@@ -83,10 +83,7 @@ input, select, textarea { font-family: inherit; }
 .tag.sm { padding: 2px 8px; font-size: 11px; }
 .tag.ok { background: var(--green-bg); color: var(--green-dark); border-color: color-mix(in srgb, var(--green) 35%, transparent); }
 .tag.pendente { background: var(--gray-bg); color: var(--gray-dark); border-color: color-mix(in srgb, var(--gray) 35%, transparent); }
-.tag.leve { background: var(--leve-bg); color: var(--leve-dark); border-color: color-mix(in srgb, var(--leve) 35%, transparent); }
-.tag.medio { background: var(--medio-bg); color: var(--medio-dark); border-color: color-mix(in srgb, var(--medio) 35%, transparent); }
-.tag.grave { background: var(--grave-bg); color: var(--grave-dark); border-color: color-mix(in srgb, var(--grave) 35%, transparent); }
-.tag.gravissimo { background: var(--gravissimo-bg); color: var(--gravissimo-dark); border-color: color-mix(in srgb, var(--gravissimo) 35%, transparent); }
+.tag.problema { background: var(--amber-bg); color: var(--amber-dark); border-color: color-mix(in srgb, var(--amber) 35%, transparent); }
 
 .codebadge { display: inline-block; background: var(--steel); color: #fff; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-right: 7px; }
 
@@ -117,11 +114,7 @@ input, select, textarea { font-family: inherit; }
   display: flex; flex-direction: column; align-items: center; gap: 3px;
 }
 .status-btn.active-ok { border-color: var(--green); background: var(--green-bg); color: var(--green-dark); }
-.status-btn.active-leve { border-color: var(--leve); background: var(--leve-bg); color: var(--leve-dark); }
-.status-btn.active-medio { border-color: var(--medio); background: var(--medio-bg); color: var(--medio-dark); }
-.status-btn.active-grave { border-color: var(--grave); background: var(--grave-bg); color: var(--grave-dark); }
-.status-btn.active-gravissimo { border-color: var(--gravissimo); background: var(--gravissimo-bg); color: var(--gravissimo-dark); }
-.grau-btn { font-size: 10.5px; padding: 8px 2px; }
+.status-btn.active-problema { border-color: var(--amber); background: var(--amber-bg); color: var(--amber-dark); }
 
 .chip-select-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip-select { padding: 6px 11px; border-radius: 16px; border: 1px solid var(--line); background: #fff; color: var(--ink-soft); font-size: 12px; }
