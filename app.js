@@ -82,6 +82,7 @@ const DEFAULT_ITEMS = [
   { id: "guiaEntrada", codigo: "9.49", categoria: "Estruturais", nome: "Guia de entrada dos paletes faltante, danificada ou com falha", descOpcoes: ["DANIFICADOS", "FALTANTES", "COM FALHAS NA FIXAÇÃO"], peca: "Guia de entrada dos paletes faltante, danificada ou com falha" },
   { id: "trilho", codigo: "9.50", categoria: "Estruturais", nome: "Trilho de entrada e/ou trilho menor de saída faltante, danificado ou com falha", descOpcoes: ["TRILHO DE ENTRADA DANIFICADO", "TRILHO DE ENTRADA FALTANTE", "TRILHO DE ENTRADA COM FALHAS NA FIXAÇÃO", "TRILHO MENOR DE SAÍDA DANIFICADO", "TRILHO MENOR DE SAÍDA FALTANTE", "TRILHO MENOR DE SAÍDA COM FALHAS NA FIXAÇÃO"], peca: "Trilho de entrada e/ou trilho menor de saída faltante, danificado ou com falha" },
 ];
+const CATALOG_VERSION = 2;
 const DEFAULT_CONFIG = {
   empresa: "Minha Empresa",
   locais: ["Centro de Distribuição 001", "Loja Centro", "Loja Shopping"],
@@ -89,7 +90,13 @@ const DEFAULT_CONFIG = {
   setores: ["SALÃO DE VENDAS", "DEPÓSITO", "CÂMARAS FRIGORÍFICAS", "OUTROS"],
   tiposEstrutura: ["SIMPLES ENTRADA", "DUPLA ENTRADA"],
   itens: DEFAULT_ITEMS,
+  catalogVersion: CATALOG_VERSION,
 };
+function mergeCatalog(existingItens) {
+  const defaultIds = new Set(DEFAULT_ITEMS.map((it) => it.id));
+  const customExtra = (existingItens || []).filter((it) => !defaultIds.has(it.id));
+  return DEFAULT_ITEMS.concat(customExtra);
+}
 const STATUS = {
   pendente: { label: "Pendente", short: "PEND", icon: "clock" },
   ok: { label: "Conforme", short: "OK", icon: "check" },
@@ -244,8 +251,15 @@ const state = {
 
 async function boot() {
   const cfg = await idbGet("config", "main");
-  state.config = cfg || DEFAULT_CONFIG;
-  if (!cfg) await idbSet("config", "main", DEFAULT_CONFIG);
+  if (!cfg) {
+    state.config = DEFAULT_CONFIG;
+    await idbSet("config", "main", DEFAULT_CONFIG);
+  } else if ((cfg.catalogVersion || 0) < CATALOG_VERSION) {
+    state.config = { ...cfg, itens: mergeCatalog(cfg.itens), catalogVersion: CATALOG_VERSION };
+    await idbSet("config", "main", state.config);
+  } else {
+    state.config = cfg;
+  }
   await persistVistoriaList();
   const parts = await idbGet("parts", "main");
   state.orderedParts = parts || {};
@@ -406,12 +420,29 @@ function HomeScreen() {
 }
 function VistoriaRow(v, isDraft) {
   const nEst = (v.estruturas || []).length;
+  const rightSide = isDraft
+    ? el("div", { style: "display:flex;align-items:center;gap:8px" },
+        el("span", { class: "badge-draft" }, "rascunho"),
+        (() => {
+          const b = el("button", { style: "background:none;border:none;color:var(--ink-faint)", html: svg("trash", 15) });
+          b.addEventListener("click", async (ev) => {
+            ev.stopPropagation();
+            if (confirm("Excluir este rascunho de inspeção? Essa ação não pode ser desfeita.")) {
+              if (state.draftVistoria && state.draftVistoria.id === v.id) state.draftVistoria = null;
+              await idbDelete("vistorias", v.id);
+              await persistVistoriaList();
+              render();
+            }
+          });
+          return b;
+        })())
+    : Tag(vistoriaStatus(v), "sm");
   const row = el("div", { class: "insp-row", onclick: () => go(isDraft ? "vistoria" : "report", v.id) },
     el("div", {},
       el("div", { class: "insp-code" }, v.lojaCd || "(sem Loja/CD ainda)"),
       el("div", { class: "insp-sub" }, (v.local ? v.local + " · " : "") + nEst + " estrutura" + (nEst === 1 ? "" : "s") + (v.inspetor ? " · " + v.inspetor : "")),
       el("div", { class: "insp-date" }, fmtDateOnly(v.data) || fmtDate(v.createdAt))),
-    isDraft ? el("span", { class: "badge-draft" }, "rascunho") : Tag(vistoriaStatus(v), "sm"));
+    rightSide);
   return Card({ style: "padding:0;cursor:pointer" }, row);
 }
 
@@ -427,7 +458,7 @@ function newEstruturaSkeleton() {
   };
 }
 function newMontanteSkeleton(numero) {
-  return { id: uid(), numero, itens: state.config.itens.map((it) => ({ ...it, status: "pendente", obs: "", foto: null, valor: "", corte: "", qtd: 1, correcao: "", descSel: [], tipoSel: [], localSel: [] })) };
+  return { id: uid(), numero, itens: state.config.itens.map((it) => ({ ...it, status: "pendente", obs: "", foto: null, valor: "", corte: "", qtd: 1, correcao: "", descTxt: "", tipoTxt: "", localTxt: "" })) };
 }
 function syncMontantes(e) {
   const target = parseInt(e.modulos, 10) || 0;
@@ -513,6 +544,19 @@ function VistoriaScreen() {
 
   const errBox = el("div", { id: "form-error" });
   inner.appendChild(errBox);
+
+  const deleteDraftBtn = el("button", { class: "action-btn no-print", style: "background:#fff;color:var(--red-dark);border:1px solid var(--red-bg);margin-top:14px" },
+    el("span", { html: svg("trash", 15) }), " Excluir este rascunho");
+  deleteDraftBtn.addEventListener("click", async () => {
+    if (confirm("Excluir este rascunho de inspeção? Essa ação não pode ser desfeita.")) {
+      const id = v.id;
+      state.draftVistoria = null;
+      await idbDelete("vistorias", id);
+      await persistVistoriaList();
+      go("home");
+    }
+  });
+  inner.appendChild(deleteDraftBtn);
 
   const submitWrap = el("div", { class: "sticky-submit no-print" },
     el("button", { class: "submit-btn", onclick: () => submitVistoria(v, errBox) }, "Concluir inspeção"));
@@ -706,14 +750,20 @@ function ChecklistItemCard(item) {
   } else {
     const conformeRow = el("div", { class: "status-row" });
     const btnOk = el("button", { class: "status-btn" + (item.status === "ok" ? " active-ok" : ""), title: "Conforme" }, el("span", { html: svg("check", 15) }), "CONFORME");
-    btnOk.addEventListener("click", () => { item.status = "ok"; item.obs = ""; item.descSel = []; item.tipoSel = []; item.localSel = []; saveVistoriaDebounced(); render(); });
+    btnOk.addEventListener("click", () => { item.status = "ok"; item.obs = ""; item.descTxt = ""; item.tipoTxt = ""; item.localTxt = ""; saveVistoriaDebounced(); render(); });
     const btnAnomalia = el("button", { class: "status-btn" + (isProblem(item.status) ? " active-medio" : ""), title: "Com anomalia" }, el("span", { html: svg("alert", 15) }), "COM ANOMALIA");
     btnAnomalia.addEventListener("click", () => { if (!isProblem(item.status)) item.status = "medio"; saveVistoriaDebounced(); render(); });
     conformeRow.appendChild(btnOk); conformeRow.appendChild(btnAnomalia);
     card.appendChild(conformeRow);
 
     if (isProblem(item.status)) {
-      const grauRow = el("div", { class: "status-row", style: "margin-top:6px" });
+      if (item.descOpcoes) card.appendChild(Field("Descrição", suggestInput(item.descTxt, (val) => { item.descTxt = val; saveVistoriaDebounced(); }, "Digite a descrição da anomalia", item.descOpcoes)));
+      if (item.tipoOpcoes) card.appendChild(Field("Tipo", suggestInput(item.tipoTxt, (val) => { item.tipoTxt = val; saveVistoriaDebounced(); }, "Digite o tipo/componente", item.tipoOpcoes)));
+      if (item.localOpcoes) card.appendChild(Field(item.localLabel || "Localização", suggestInput(item.localTxt, (val) => { item.localTxt = val; saveVistoriaDebounced(); }, "Digite a localização", item.localOpcoes)));
+
+      const grauLabel = el("div", { style: "font-size:11.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin:10px 0 4px" }, "Grau");
+      card.appendChild(grauLabel);
+      const grauRow = el("div", { class: "status-row" });
       GRAU_STATUSES.forEach((key) => {
         const s = STATUS[key];
         const btn = el("button", { class: "status-btn grau-btn" + (item.status === key ? " active-" + key : "") },
@@ -726,10 +776,6 @@ function ChecklistItemCard(item) {
   }
 
   if (isProblem(item.status)) {
-    if (item.descOpcoes) card.appendChild(ChipMultiSelect("Descrição", item.descOpcoes, item.descSel, () => saveVistoriaDebounced()));
-    if (item.tipoOpcoes) card.appendChild(ChipMultiSelect("Tipo", item.tipoOpcoes, item.tipoSel, () => saveVistoriaDebounced()));
-    if (item.localOpcoes) card.appendChild(ChipMultiSelect(item.localLabel || "Localização", item.localOpcoes, item.localSel, () => saveVistoriaDebounced()));
-
     card.appendChild(Field("Nível(is) afetado(s)", inputEl(item.corte || "", (val) => { item.corte = val; saveVistoriaDebounced(); }, "Ex: 1 a 5, ou 3")));
     card.appendChild(Field("Quantidade", inputEl(item.qtd == null ? 1 : item.qtd, (val) => { item.qtd = val; saveVistoriaDebounced(); }, "1", "number")));
 
@@ -940,7 +986,7 @@ function buildAnomaliaRows(v) {
           setor: e.setor || "", tipoEstrutura: e.tipoEstrutura || "", numeroEstrutura: e.codigo || "",
           lado: e.lado || "", montante: m.numero, corte: i.corte || "",
           codigoAnomalia: i.codigo || "", nomeAnomalia: i.nome || "",
-          descricao: (i.descSel || []).join(" · "), tipo: (i.tipoSel || []).join(" · "), localizacao: (i.localSel || []).join(" · "),
+          descricao: i.descTxt || "", tipo: i.tipoTxt || "", localizacao: i.localTxt || "",
           grau: STATUS[i.status].label,
           categoria: i.categoria || "", correcao: i.correcao || "", qtd: i.qtd == null ? 1 : i.qtd,
           fabricante: e.fabricante || "",
@@ -951,7 +997,7 @@ function buildAnomaliaRows(v) {
   return rows;
 }
 function pecaDoItem(i) {
-  if (i.tipoSel && i.tipoSel.length) return i.tipoSel.join(" + ");
+  if (i.tipoTxt) return i.tipoTxt;
   return i.peca;
 }
 function csvEscape(val) {
