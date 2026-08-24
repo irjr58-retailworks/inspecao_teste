@@ -33,38 +33,54 @@ function svg(name, size = 16, extra = "") {
 
 /* ---------------- Config padrão / taxonomia 9.x ---------------- */
 const DEFAULT_ITEMS = [
-  { id: "prumo", codigo: "9.17", categoria: "Estruturais", nome: "Prumo da estrutura", desc: "Desaprumo longitudinal ou transversal fora da tolerância normativa", peca: "Serviço de realinhamento (prumo)", niveis: { ok: "Na tolerância do prumo", atencao: "Fora de prumo", critico: "Fora de prumo grave" } },
-  { id: "col", codigo: "9.16", categoria: "Estruturais", nome: "Colunas", desc: "Amassados, flambagem, corte ou trincas na coluna vertical", peca: "Coluna vertical" },
-  { id: "colunaBase", codigo: "9.15", categoria: "Estruturais", nome: "Coluna solta da placa de base", desc: "Coluna sem solda ou fixação adequada à placa de base", peca: "Solda/fixação da coluna" },
-  { id: "juncao", codigo: "9.19", categoria: "Estruturais", nome: "Junção de coluna", desc: "Emenda de coluna com folga, desalinhada ou danificada", peca: "Kit de junção de coluna" },
-  { id: "desalinh", codigo: "9.20", categoria: "Estruturais", nome: "Desalinhamento das colunas", desc: "Colunas de um mesmo montante fora do alinhamento entre si", peca: "Serviço de realinhamento" },
-  { id: "placaBase", codigo: "9.13 · 9.14 · 9.39", categoria: "Estruturais", nome: "Placa de base", desc: "Danificada, ausente ou adaptada fora do padrão do fabricante", peca: "Placa de base" },
-  { id: "chumbador", codigo: "9.12", categoria: "Estruturais", nome: "Chumbadores / fixação ao piso", desc: "Falta ou falha na fixação da placa de base ao piso", peca: "Chumbador" },
-  { id: "calco", codigo: "9.38", categoria: "Estruturais", nome: "Calços de nivelação", desc: "Ausentes ou insuficientes sob a placa de base", peca: "Calço de nivelação" },
-  { id: "configuracao", codigo: "9.1", categoria: "Gerais", nome: "Configuração do montante", desc: "Configuração de níveis divergente do projeto original", peca: "Revisão de projeto / configuração" },
-  { id: "longarina", codigo: "9.2 · 9.3 · 9.4 · 9.5 · 9.7", categoria: "Estruturais", nome: "Longarinas (vigas)", desc: "Empenamento, flexão, encaixe solto, tipo divergente ou mal posicionada", peca: "Longarina" },
-  { id: "travessa", codigo: "9.8 · 9.9 · 9.10 · 9.11", categoria: "Estruturais", nome: "Travessas", desc: "Solta, faltante, danificada ou mal posicionada", peca: "Travessa" },
-  { id: "diagonal", codigo: "9.8 · 9.9 · 9.10 · 9.11", categoria: "Estruturais", nome: "Diagonais de contraventamento", desc: "Solta, faltante, danificada ou mal posicionada", peca: "Diagonal de contraventamento" },
-  { id: "contravFundo", codigo: "9.44", categoria: "Estruturais", nome: "Contraventamento de fundo / horizontal", desc: "Ausente ou danificado", peca: "Contraventamento" },
-  { id: "transversina", codigo: "9.46", categoria: "Estruturais", nome: "Transversina / reforço", desc: "Ausente ou danificada", peca: "Transversina / reforço" },
-  { id: "adaptacoes", codigo: "9.6 · 9.18", categoria: "Gerais", nome: "Adaptações na estrutura", desc: "Furações, componentes soldados ou adaptações fora de projeto", peca: "Avaliação técnica de engenharia" },
-  { id: "protetor", codigo: "9.21", categoria: "Segurança", nome: "Protetor de coluna", desc: "Ausente, danificado ou com parafusos de fixação faltando", peca: "Protetor de coluna" },
-  { id: "distMontante", codigo: "9.22 · 9.23 · 9.24 · 9.25", categoria: "Estruturais", nome: "Distanciador de montante", desc: "Ausente ou danificado entre colunas duplas", peca: "Distanciador de montante" },
-  { id: "distParede", codigo: "9.26 · 9.27 · 9.28", categoria: "Estruturais", nome: "Distanciador de parede", desc: "Ausente ou danificado", peca: "Distanciador de parede" },
-  { id: "stopper", codigo: "9.43", categoria: "Segurança", nome: "Stopper / batente de paletes", desc: "Ausente ou danificado", peca: "Stopper" },
-  { id: "suporteCentral", codigo: "9.41", categoria: "Estruturais", nome: "Suporte rack central", desc: "Ausente, danificado ou desalinhado", peca: "Suporte rack central" },
-  { id: "amarracao", codigo: "9.32", categoria: "Estruturais", nome: "Amarrações superiores", desc: "Ausentes ou soltas entre estruturas", peca: "Amarração superior / tirante" },
-  { id: "gondola", codigo: "9.29 · 9.30 · 9.31", categoria: "Gerais", nome: "Gôndolas", desc: "Danos estruturais na gôndola de acabamento", peca: "Reparo de gôndola" },
-  { id: "colunaGondola", codigo: "9.42", categoria: "Gerais", nome: "Coluna da gôndola", desc: "Identificação ausente ou dano na coluna da gôndola", peca: "Coluna de gôndola" },
-  { id: "planoMetalico", codigo: "9.40", categoria: "Gerais", nome: "Plano metálico ou de madeira", desc: "Ausente, quebrado ou fora de especificação", peca: "Plano metálico / de madeira" },
-  { id: "piso", codigo: "9.37", categoria: "Gerais", nome: "Piso do corredor", desc: "Trincas, buracos ou desnível que comprometam a operação", peca: "Reparo de piso" },
-  { id: "corrosao", codigo: "9.36", categoria: "Gerais", nome: "Corrosão", desc: "Corrosão em coluna, longarina, travessa, diagonal ou plano metálico", peca: "Tratamento anticorrosivo / substituição" },
-  { id: "desplacamento", codigo: "9.35", categoria: "Gerais", nome: "Desplacamento de pintura", desc: "Pintura solta expondo o metal — indício de impacto ou corrosão", peca: "Retoque de pintura anticorrosiva" },
-  { id: "placaCarga", codigo: "", categoria: "Segurança", nome: "Placa de capacidade de carga", desc: "Ausente, ilegível ou capacidade divergente do projeto", peca: "Placa de identificação de carga" },
-  { id: "luminaria", codigo: "9.34", categoria: "Iluminação", nome: "Luminárias", desc: "Queimada, ausente ou insuficiente sobre o corredor", peca: "Luminária" },
-  { id: "iluminacao", codigo: "9.45", categoria: "Iluminação", nome: "Nível de iluminação do corredor", desc: "Medição de iluminância — mínimo recomendado 50 lux", peca: "Reforço de iluminação", tipo: "medicao", unidade: "lux", min: 50 },
-  { id: "unidadeCarga", codigo: "9.33", categoria: "Gerais", nome: "Unidades de carga / paletização", desc: "Paletes danificados, mal posicionados ou fora do padrão", peca: "Orientação de paletização" },
-  { id: "vao", codigo: "", categoria: "Segurança", nome: "Sinalização e vão livre", desc: "Corredor obstruído ou sinalização de circulação apagada", peca: "Sinalização de piso" },
+  { id: "layout", codigo: "9.1", categoria: "Gerais", nome: "Ausência de layout/projeto ou mudanças de configuração", descOpcoes: ["FALTA DE PROJETO OU LAYOUT", "ALTERAÇÃO DE PROJETO OU LAYOUT", "LONGARINA(S) FALTANTE(S)"], tipoOpcoes: ["LONGARINA SUPERIOR", "LONGARINA INFERIOR", "LONGARINA MÓVEL", "LONGARINA PICKING", "LONGARINA BASE", "LONGARINA ESCALONADA", "LONGARINA INFERIOR DA GÔNDOLA", "LONGARINA DA GÔNDOLA DIREITA", "LONGARINA DA GÔNDOLA ESQUERDA", "ANOMALIA GERAL"], localOpcoes: ["FRONTAL", "TRASEIRA", "FRONTAL / TRASEIRA"], peca: "Ausência de layout/projeto ou mudanças de configuração" },
+  { id: "sobrecarga", codigo: "9.2", categoria: "Estruturais", nome: "Sobrecarga nas longarinas e/ou longarinas com flecha", descOpcoes: ["SOBRECARGA NAS LONGARINAS", "LONGARINA COM FLECHA"], tipoOpcoes: ["LONGARINA SUPERIOR", "LONGARINA INFERIOR", "LONGARINA MÓVEL", "LONGARINA PICKING", "LONGARINA BASE", "LONGARINA ESCALONADA", "LONGARINA INFERIOR DA GÔNDOLA", "LONGARINA DA GÔNDOLA DIREITA", "LONGARINA DA GÔNDOLA ESQUERDA"], localOpcoes: ["FRONTAL", "TRASEIRA", "FRONTAL / TRASEIRA"], peca: "Sobrecarga nas longarinas e/ou longarinas com flecha" },
+  { id: "travaSeguranca", codigo: "9.3", categoria: "Segurança", nome: "Longarinas sem trava de segurança e/ou trava com falha/adaptada", descOpcoes: ["SEM TRAVA DE SEGURANÇA", "SEM TRAVA DE SEGURANÇA TIPO C FRONTAL (NSF)", "SEM TRAVA DE SEGURANÇA PARAFUSO + PORCA LATERAL (NSF)", "SEM TRAVA DE SEGURANÇA PARAFUSO + PORCA (AGRA)", "TRAVA DE SEGURANÇA COM MONTAGEM FALHA", "TRAVA DE SEGURANÇA ADAPTADA"], tipoOpcoes: ["LONGARINA SUPERIOR", "LONGARINA INFERIOR", "LONGARINA MÓVEL", "LONGARINA PICKING", "LONGARINA BASE", "LONGARINA ESCALONADA"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Longarinas sem trava de segurança e/ou trava com falha/adaptada" },
+  { id: "longDanificada", codigo: "9.4", categoria: "Estruturais", nome: "Longarinas danificadas por impacto e/ou torção", descOpcoes: ["LONGARINA DANIFICADA", "LONGARINA TORCIDA", "LONGARINA TROCADA"], tipoOpcoes: ["LONGARINA SUPERIOR", "LONGARINA INFERIOR", "LONGARINA MÓVEL", "LONGARINA PICKING", "LONGARINA BASE", "LONGARINA ESCALONADA", "LONGARINA INFERIOR DA GÔNDOLA", "LONGARINA DA GÔNDOLA DIREITA", "LONGARINA DA GÔNDOLA ESQUERDA"], localOpcoes: ["FRONTAL", "TRASEIRA", "FRONTAL / TRASEIRA"], peca: "Longarinas danificadas por impacto e/ou torção" },
+  { id: "longDesencaixada", codigo: "9.5", categoria: "Estruturais", nome: "Longarina com garras do conector desencaixadas da coluna", descOpcoes: ["LONGARINA DESENCAIXADA"], tipoOpcoes: ["LONGARINA SUPERIOR", "LONGARINA INFERIOR", "LONGARINA MÓVEL", "LONGARINA PICKING", "LONGARINA BASE", "LONGARINA ESCALONADA", "LONGARINA INFERIOR DA GÔNDOLA", "LONGARINA DA GÔNDOLA DIREITA", "LONGARINA DA GÔNDOLA ESQUERDA"], localOpcoes: ["FRONTAL", "TRASEIRA", "FRONTAL / TRASEIRA"], peca: "Longarina com garras do conector desencaixadas da coluna" },
+  { id: "adaptacoes", codigo: "9.6", categoria: "Gerais", nome: "Adaptações (soldas, enxertos, mescla de fabricantes) nos porta-paletes e/ou gôndolas", descOpcoes: ["ADAPTAÇÃO EM COMPONENTES DO PORTA-PALETES", "ADAPTAÇÃO EM COMPONENTES DA GÔNDOLA"], tipoOpcoes: ["LONGARINA SUPERIOR", "LONGARINA INFERIOR", "LONGARINA MÓVEL", "LONGARINA PICKING", "LONGARINA BASE", "LONGARINA ESCALONADA", "TRAVESSA", "DIAGONAL", "COLUNA", "CHUMBADOR DA PLACA DE BASE", "PLACA DE BASE", "PLACA DE BASE CONTÍNUA", "DISTANCIADOR DE MONTANTE", "DISTANCIADOR DE PAREDE", "AMARRAÇÃO SUPERIOR", "PROTETOR DE COLUNA", "PROTETOR TRILHO (DINÂMICO)", "PROTETOR DE COLUNA DO GUARD-RAIL", "CANELEIRA", "TUBO DO GUARD RAIL SIMPLES (1X)", "TUBO DO GUARD RAIL SIMPLES (2X)", "TUBO DO GUARD RAIL SIMPLES (3X)", "TUBO DO GUARD RAIL DUPLO (1X)", "TUBO DO GUARD RAIL DUPLO (2X)", "TUBO DO GUARD RAIL DUPLO (3X)", "APOIO CENTRAL DO GUARD RAIL", "JUNÇÃO DE COLUNA", "OUTROS", "COLUNA GÔNDOLA", "LONGARINA INFERIOR DA GÔNDOLA", "LONGARINA DA GÔNDOLA DIREITA", "LONGARINA DA GÔNDOLA ESQUERDA", "APOIO CENTRAL DA GÔNDOLA", "APOIO DIREITO DA GÔNDOLA", "APOIO ESQUERDO DA GÔNDOLA", "BASE DA GÔNDOLA", "CESTO DA GÔNDOLA", "QUADRO DA GÔNDOLA", "PRATELEIRA BASE DA GÔNDOLA", "PRATELEIRA DA GÔNDOLA", "BRAÇO DA GÔNDOLA INTEGRADA", "BRAÇO DA GÔNDOLA", "BRAÇO RACK DA GÔNDOLA", "BRAÇO RACK DA GÔNDOLA INTEGRADA"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Adaptações (soldas, enxertos, mescla de fabricantes) nos porta-paletes e/ou gôndolas" },
+  { id: "longMalPosicionada", codigo: "9.7", categoria: "Estruturais", nome: "Longarinas mal posicionadas nas colunas do montante", descOpcoes: ["LONGARINA DESNIVELADA", "LONGARINA DESALINHADA"], tipoOpcoes: ["LONGARINA SUPERIOR", "LONGARINA INFERIOR", "LONGARINA MÓVEL", "LONGARINA PICKING", "LONGARINA BASE", "LONGARINA ESCALONADA", "LONGARINA INFERIOR DA GÔNDOLA", "LONGARINA DA GÔNDOLA DIREITA", "LONGARINA DA GÔNDOLA ESQUERDA"], localOpcoes: ["FRONTAL", "TRASEIRA", "FRONTAL / TRASEIRA"], peca: "Longarinas mal posicionadas nas colunas do montante" },
+  { id: "travessa", codigo: "9.8 · 9.9 · 9.10 · 9.11", categoria: "Estruturais", nome: "Travessas sem fixação, faltantes, danificadas ou mal posicionadas", descOpcoes: ["TRAVESSA SEM FIXAÇÃO (SOLTA)", "TRAVESSA COM FIXAÇÕES AFROUXADAS", "TRAVESSA FALTANTE", "TRAVESSA DANIFICADA", "TRAVESSA TROCADA", "TRAVESSA MAL POSICIONADA"], peca: "Travessas sem fixação, faltantes, danificadas ou mal posicionadas" },
+  { id: "diagonal", codigo: "9.8 · 9.9 · 9.10 · 9.11", categoria: "Estruturais", nome: "Diagonais sem fixação, faltantes, danificadas ou mal posicionadas", descOpcoes: ["DIAGONAL SEM FIXAÇÃO (SOLTA)", "DIAGONAL COM FIXAÇÕES AFROUXADAS", "DIAGONAL FALTANTE", "DIAGONAL DANIFICADA", "DIAGONAL TROCADA", "DIAGONAL MAL POSICIONADA"], peca: "Diagonais sem fixação, faltantes, danificadas ou mal posicionadas" },
+  { id: "chumbador", codigo: "9.12", categoria: "Estruturais", nome: "Falta e/ou falha na fixação dos chumbadores", descOpcoes: ["CHUMBADORES FALTANTES", "FALHA NA FIXAÇÃO DOS CHUMBADORES"], tipoOpcoes: ["PLACA DE BASE", "PLACA DE BASE CONTÍNUA"], localOpcoes: ["FRONTAL", "TRASEIRA", "FRONTAL / TRASEIRA"], peca: "Falta e/ou falha na fixação dos chumbadores" },
+  { id: "placaBaseDanificada", codigo: "9.13", categoria: "Estruturais", nome: "Placas de base danificadas", descOpcoes: ["DANIFICADA", "TROCADA"], tipoOpcoes: ["PLACA DE BASE", "PLACA DE BASE CONTÍNUA"], localOpcoes: ["FRONTAL", "TRASEIRA", "FRONTAL / TRASEIRA"], peca: "Placas de base danificadas" },
+  { id: "placaBaseAdaptada", codigo: "9.14", categoria: "Gerais", nome: "Placas de base adaptadas", descOpcoes: ["ADAPTAÇÃO"], tipoOpcoes: ["PLACA DE BASE", "PLACA DE BASE CONTÍNUA"], localOpcoes: ["FRONTAL", "TRASEIRA", "FRONTAL / TRASEIRA"], peca: "Placas de base adaptadas" },
+  { id: "colunaSoltaBase", codigo: "9.15", categoria: "Estruturais", nome: "Colunas sem fixação e/ou com fixações afrouxadas na placa de base", descOpcoes: ["COLUNA COM FIXAÇÕES AFROUXADAS NA PLACA DE BASE (1/2)", "COLUNA COM FIXAÇÕES AFROUXADAS NA PLACA DE BASE (2/2)", "COLUNA SEM FIXAÇÃO NA PLACA DE BASE (1/2)", "COLUNA SEM FIXAÇÃO NA PLACA DE BASE (2/2)"], localOpcoes: ["FRONTAL", "TRASEIRA", "FRONTAL / TRASEIRA"], peca: "Colunas sem fixação e/ou com fixações afrouxadas na placa de base" },
+  { id: "colunaDanificada", codigo: "9.16", categoria: "Estruturais", nome: "Colunas torcidas e/ou com impactos e deformadas", descOpcoes: ["COLUNA DANIFICADA", "COLUNA TORCIDA", "COLUNA TROCADA"], localOpcoes: ["FRONTAL", "TRASEIRA", "FRONTAL / TRASEIRA"], peca: "Colunas torcidas e/ou com impactos e deformadas" },
+  { id: "prumo", codigo: "9.17", categoria: "Estruturais", nome: "Colunas com problemas de prumo", descOpcoes: ["COLUNA NO PRUMO", "COLUNA NA TOLERÂNCIA DO PRUMO", "COLUNA FORA DE PRUMO", "COLUNA SEM ACESSO"], localOpcoes: ["LONGITUDINAL", "TRANSVERSAL"], localLabel: "Localização (Longitudinal / Transversal)", peca: "Colunas com problemas de prumo" },
+  { id: "componentesSoldados", codigo: "9.18", categoria: "Gerais", nome: "Componentes soldados nas estruturas porta-paletes e/ou gôndolas", descOpcoes: ["COMPONENTES SOLDADOS NO PORTA-PALETES", "COMPONENTES SOLDADOS NA GÔNDOLA"], tipoOpcoes: ["LONGARINA SUPERIOR", "LONGARINA INFERIOR", "LONGARINA MÓVEL", "LONGARINA PICKING", "LONGARINA BASE", "LONGARINA ESCALONADA", "TRAVESSA", "DIAGONAL", "COLUNA", "CHUMBADOR DA PLACA DE BASE", "PLACA DE BASE", "PLACA DE BASE CONTÍNUA", "DISTANCIADOR DE MONTANTE", "DISTANCIADOR DE PAREDE", "AMARRAÇÃO SUPERIOR", "PROTETOR DE COLUNA", "PROTETOR TRILHO (DINÂMICO)", "PROTETOR DE COLUNA DO GUARD-RAIL", "CANELEIRA", "TUBO DO GUARD RAIL SIMPLES (1X)", "TUBO DO GUARD RAIL SIMPLES (2X)", "TUBO DO GUARD RAIL SIMPLES (3X)", "TUBO DO GUARD RAIL DUPLO (1X)", "TUBO DO GUARD RAIL DUPLO (2X)", "TUBO DO GUARD RAIL DUPLO (3X)", "APOIO CENTRAL DO GUARD RAIL", "JUNÇÃO DE COLUNA", "OUTROS", "TAMPA DA PLACA DE BASE CONTÍNUA", "COLUNA GÔNDOLA", "LONGARINA INFERIOR DA GÔNDOLA", "LONGARINA DA GÔNDOLA DIREITA", "LONGARINA DA GÔNDOLA ESQUERDA", "APOIO CENTRAL DA GÔNDOLA", "APOIO DIREITO DA GÔNDOLA", "APOIO ESQUERDO DA GÔNDOLA", "BASE DA GÔNDOLA", "CESTO DA GÔNDOLA", "QUADRO DA GÔNDOLA", "PRATELEIRA BASE DA GÔNDOLA", "PRATELEIRA DA GÔNDOLA", "BRAÇO DA GÔNDOLA INTEGRADA", "BRAÇO DA GÔNDOLA", "BRAÇO RACK DA GÔNDOLA", "BRAÇO RACK DA GÔNDOLA INTEGRADA"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Componentes soldados nas estruturas porta-paletes e/ou gôndolas" },
+  { id: "juncao", codigo: "9.19", categoria: "Estruturais", nome: "Emenda das colunas danificada, faltante ou com fixações afrouxadas", descOpcoes: ["EMENDA SEM FIXAÇÃO", "EMENDA COM FIXAÇÕES AFROUXADAS", "EMENDA COM FALHA NA INSTALAÇÃO (VÃO ENTRE COLUNAS)", "FALHA NO CORTE DA COLUNA", "EMENDA DANIFICADA", "EMENDA FALTANTE"], localOpcoes: ["FRONTAL", "TRASEIRA", "FRONTAL / TRASEIRA"], peca: "Emenda das colunas danificada, faltante ou com fixações afrouxadas" },
+  { id: "desalinh", codigo: "9.20", categoria: "Estruturais", nome: "Desalinhamento das colunas do montante e/ou da estrutura", descOpcoes: ["COLUNA DESALINHADA", "ESTRUTURA DESALINHADA"], localOpcoes: ["FRONTAL", "TRASEIRA", "GERAL"], peca: "Desalinhamento das colunas do montante e/ou da estrutura" },
+  { id: "protetor", codigo: "9.21", categoria: "Segurança", nome: "Protetores de coluna, guard rails, protetor trilho e/ou caneleiras com falha", descOpcoes: ["DANIFICADO", "FALHA NA FIXAÇÃO", "FALTANTE", "FALHA DE PROXIMIDADE", "INCLINADO"], localOpcoes: ["PROTETOR DE COLUNA", "PROTETOR DE COLUNA DO GUARD RAIL", "TUBO DO GUARD RAIL SIMPLES", "TUBO DO GUARD RAIL DUPLO", "APOIO CENTRAL DO GUARD RAIL", "CANELEIRA", "PROTETOR TRILHO (DINÂMICO)"], localLabel: "Componente", peca: "Protetores de coluna, guard rails, protetor trilho e/ou caneleiras com falha" },
+  { id: "distMontAdapt", codigo: "9.22", categoria: "Gerais", nome: "Distanciadores de montantes adaptados", descOpcoes: ["DISTANCIADORES DE MONTANTES ADAPTADOS"], peca: "Distanciadores de montantes adaptados" },
+  { id: "distMontSolto", codigo: "9.23", categoria: "Estruturais", nome: "Distanciadores de montantes sem fixação ou com fixações afrouxadas", descOpcoes: ["DISTANCIADORES DE MONTANTE SEM FIXAÇÕES", "DISTANCIADORES DE MONTANTE COM FIXAÇÕES AFROUXADAS"], peca: "Distanciadores de montantes sem fixação ou com fixações afrouxadas" },
+  { id: "distMontFalta", codigo: "9.24", categoria: "Estruturais", nome: "Falta de distanciadores de montantes", descOpcoes: ["DISTANCIADORES DE MONTANTES FALTANTE"], peca: "Falta de distanciadores de montantes" },
+  { id: "distMontDanif", codigo: "9.25", categoria: "Estruturais", nome: "Distanciadores de montantes danificados", descOpcoes: ["DISTANCIADORES DE MONTANTES DANIFICADO"], peca: "Distanciadores de montantes danificados" },
+  { id: "distParedeAdapt", codigo: "9.26", categoria: "Gerais", nome: "Distanciadores de parede adaptados", descOpcoes: ["DISTANCIADORES DE PAREDE ADAPTADO"], peca: "Distanciadores de parede adaptados" },
+  { id: "distParedeSolto", codigo: "9.27", categoria: "Estruturais", nome: "Distanciadores de parede sem fixação ou com fixações afrouxadas", descOpcoes: ["DISTANCIADORES DE PAREDE SEM FIXAÇÕES (SOLTO)", "DISTANCIADORES DE PAREDE COM FIXAÇÕES AFROUXADAS"], peca: "Distanciadores de parede sem fixação ou com fixações afrouxadas" },
+  { id: "distParedeFalta", codigo: "9.28", categoria: "Estruturais", nome: "Estrutura ou montante sem distanciadores de parede", descOpcoes: ["ESTRUTURA SEM DISTANCIADORES DE PAREDE", "MONTANTE SEM DISTANCIADORES DE PAREDE"], peca: "Estrutura ou montante sem distanciadores de parede" },
+  { id: "gondolaDanificada", codigo: "9.29", categoria: "Gerais", nome: "Componentes da gôndola danificados", descOpcoes: ["DANIFICADO"], tipoOpcoes: ["COLUNA GÔNDOLA", "LONGARINA INFERIOR DA GÔNDOLA", "LONGARINA DA GÔNDOLA DIREITA", "LONGARINA DA GÔNDOLA ESQUERDA", "APOIO CENTRAL DA GÔNDOLA", "APOIO DIREITO DA GÔNDOLA", "APOIO ESQUERDO DA GÔNDOLA", "BASE DA GÔNDOLA", "CESTO DA GÔNDOLA", "QUADRO DA GÔNDOLA", "PRATELEIRA BASE DA GÔNDOLA", "PRATELEIRA DA GÔNDOLA", "BRAÇO DA GÔNDOLA INTEGRADA", "BRAÇO DA GÔNDOLA", "BRAÇO RACK DA GÔNDOLA", "BRAÇO RACK DA GÔNDOLA INTEGRADA"], peca: "Componentes da gôndola danificados" },
+  { id: "gondolaSoldada", codigo: "9.30", categoria: "Gerais", nome: "Componentes da gôndola soldados", descOpcoes: ["SOLDADO"], tipoOpcoes: ["COLUNA GÔNDOLA", "LONGARINA INFERIOR DA GÔNDOLA", "LONGARINA DA GÔNDOLA DIREITA", "LONGARINA DA GÔNDOLA ESQUERDA", "APOIO CENTRAL DA GÔNDOLA", "APOIO DIREITO DA GÔNDOLA", "APOIO ESQUERDO DA GÔNDOLA", "BASE DA GÔNDOLA", "CESTO DA GÔNDOLA", "QUADRO DA GÔNDOLA", "PRATELEIRA BASE DA GÔNDOLA", "PRATELEIRA DA GÔNDOLA", "BRAÇO DA GÔNDOLA INTEGRADA", "BRAÇO DA GÔNDOLA", "BRAÇO RACK DA GÔNDOLA", "BRAÇO RACK DA GÔNDOLA INTEGRADA"], peca: "Componentes da gôndola soldados" },
+  { id: "posteRack", codigo: "9.31", categoria: "Estruturais", nome: "Poste rack da gôndola integrada danificado, solto, com falha ou faltante", descOpcoes: ["POSTE RACK DA GÔNDOLA DANIFICADO", "POSTE RACK DA GÔNDOLA SEM FIXAÇÕES (SOLTO)", "POSTE RACK DA GÔNDOLA COM FIXAÇÕES FALHAS", "POSTE RACK DA GÔNDOLA FALTANTE", "POSTE RACK DA GÔNDOLA SEM USO"], peca: "Poste rack da gôndola integrada danificado, solto, com falha ou faltante" },
+  { id: "amarracao", codigo: "9.32", categoria: "Estruturais", nome: "Amarrações superiores em desacordo com a norma, danificadas, faltantes ou adaptadas", descOpcoes: ["INSTALADAS EM DESACORDO COM A NORMA", "DANIFICADAS", "COM FIXAÇÕES FALHAS", "FALTANTES", "ADAPTADAS"], peca: "Amarrações superiores em desacordo com a norma, danificadas, faltantes ou adaptadas" },
+  { id: "unidadeCarga", codigo: "9.33", categoria: "Gerais", nome: "Folgas mínimas entre unidades de carga e colunas/longarinas/parede", descOpcoes: ["FOLGAS MÍNIMAS ENTRE AS UNIDADES DE CARGA"], peca: "Folgas mínimas entre unidades de carga e colunas/longarinas/parede" },
+  { id: "luminaria", codigo: "9.34", categoria: "Iluminação", nome: "Altura das luminárias prejudicando operações de carga e descarga", descOpcoes: ["ALTURA DAS LUMINÁRIAS INADEQUADAS"], peca: "Altura das luminárias prejudicando operações de carga e descarga" },
+  { id: "desplacamento", codigo: "9.35", categoria: "Gerais", nome: "Falha, falta de pintura ou desplacamento nos porta-paletes e/ou gôndolas", descOpcoes: ["DESPLACAMENTO", "FALTA DE PINTURA"], tipoOpcoes: ["LONGARINA SUPERIOR", "LONGARINA INFERIOR", "LONGARINA MÓVEL", "LONGARINA PICKING", "LONGARINA BASE", "LONGARINA ESCALONADA", "TRAVESSA", "DIAGONAL", "COLUNA", "CHUMBADOR DA PLACA DE BASE", "PLACA DE BASE", "PLACA DE BASE CONTÍNUA", "DISTANCIADOR DE MONTANTE", "DISTANCIADOR DE PAREDE", "AMARRAÇÃO SUPERIOR", "PROTETOR DE COLUNA", "PROTETOR TRILHO (DINÂMICO)", "PROTETOR DE COLUNA DO GUARD-RAIL", "CANELEIRA", "TUBO DO GUARD RAIL SIMPLES (1X)", "TUBO DO GUARD RAIL SIMPLES (2X)", "TUBO DO GUARD RAIL SIMPLES (3X)", "TUBO DO GUARD RAIL DUPLO (1X)", "TUBO DO GUARD RAIL DUPLO (2X)", "TUBO DO GUARD RAIL DUPLO (3X)", "APOIO CENTRAL DO GUARD RAIL", "JUNÇÃO DE COLUNA", "OUTROS", "TAMPA DA PLACA DE BASE CONTÍNUA", "COLUNA GÔNDOLA", "LONGARINA INFERIOR DA GÔNDOLA", "LONGARINA DA GÔNDOLA DIREITA", "LONGARINA DA GÔNDOLA ESQUERDA", "APOIO CENTRAL DA GÔNDOLA", "APOIO DIREITO DA GÔNDOLA", "APOIO ESQUERDO DA GÔNDOLA", "BASE DA GÔNDOLA", "CESTO DA GÔNDOLA", "QUADRO DA GÔNDOLA", "PRATELEIRA BASE DA GÔNDOLA", "PRATELEIRA DA GÔNDOLA", "BRAÇO DA GÔNDOLA INTEGRADA", "BRAÇO DA GÔNDOLA", "BRAÇO RACK DA GÔNDOLA", "BRAÇO RACK DA GÔNDOLA INTEGRADA"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Falha, falta de pintura ou desplacamento nos porta-paletes e/ou gôndolas" },
+  { id: "corrosao", codigo: "9.36", categoria: "Gerais", nome: "Corrosão em componentes da estrutura porta-paletes e/ou gôndolas", descOpcoes: ["CORROSÃO"], tipoOpcoes: ["LONGARINA SUPERIOR", "LONGARINA INFERIOR", "LONGARINA MÓVEL", "LONGARINA PICKING", "LONGARINA BASE", "LONGARINA ESCALONADA", "TRAVESSA", "DIAGONAL", "COLUNA", "CHUMBADOR DA PLACA DE BASE", "PLACA DE BASE", "PLACA DE BASE CONTÍNUA", "DISTANCIADOR DE MONTANTE", "DISTANCIADOR DE PAREDE", "AMARRAÇÃO SUPERIOR", "PROTETOR DE COLUNA", "PROTETOR TRILHO (DINÂMICO)", "PROTETOR DE COLUNA DO GUARD-RAIL", "CANELEIRA", "TUBO DO GUARD RAIL SIMPLES (1X)", "TUBO DO GUARD RAIL SIMPLES (2X)", "TUBO DO GUARD RAIL SIMPLES (3X)", "TUBO DO GUARD RAIL DUPLO (1X)", "TUBO DO GUARD RAIL DUPLO (2X)", "TUBO DO GUARD RAIL DUPLO (3X)", "APOIO CENTRAL DO GUARD RAIL", "JUNÇÃO DE COLUNA", "OUTROS", "TAMPA DA PLACA DE BASE CONTÍNUA", "CHAPA PORTA-PREÇO", "COLUNA GÔNDOLA", "LONGARINA INFERIOR DA GÔNDOLA", "LONGARINA DA GÔNDOLA DIREITA", "LONGARINA DA GÔNDOLA ESQUERDA", "APOIO CENTRAL DA GÔNDOLA", "APOIO DIREITO DA GÔNDOLA", "APOIO ESQUERDO DA GÔNDOLA", "BASE DA GÔNDOLA", "CESTO DA GÔNDOLA", "QUADRO DA GÔNDOLA", "PRATELEIRA BASE DA GÔNDOLA", "PRATELEIRA DA GÔNDOLA", "BRAÇO DA GÔNDOLA INTEGRADA", "BRAÇO DA GÔNDOLA", "BRAÇO RACK DA GÔNDOLA", "BRAÇO RACK DA GÔNDOLA INTEGRADA"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Corrosão em componentes da estrutura porta-paletes e/ou gôndolas" },
+  { id: "piso", codigo: "9.37", categoria: "Gerais", nome: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras", descOpcoes: ["PISO INDUSTRIAL DANIFICADO", "PISO INDUSTRIAL DESNIVELADO", "PAREDE DO PRÉDIO DANIFICADA", "COLUNA DO PRÉDIO DANIFICADA", "ÁGUA EMPOÇADA", "GOTEIRA", "OUTROS"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras" },
+  { id: "calco", codigo: "9.38", categoria: "Estruturais", nome: "Calços de nivelação adaptados, danificados, faltantes ou desalinhados", descOpcoes: ["CALÇO DE NIVELAÇÃO ADAPTADO", "CALÇO DE NIVELAÇÃO DANIFICADO", "CALÇO DE NIVELAÇÃO FALTANTE", "CALÇO DE NIVELAÇÃO DESALINHADO"], tipoOpcoes: ["PLACA DE BASE", "PLACA DE BASE CONTÍNUA"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Calços de nivelação adaptados, danificados, faltantes ou desalinhados" },
+  { id: "colunaSemPlaca", codigo: "9.39", categoria: "Estruturais", nome: "Coluna sem placa de base", descOpcoes: ["COLUNA SEM PLACA DE BASE"], tipoOpcoes: ["PLACA DE BASE", "PLACA DE BASE CONTÍNUA"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Coluna sem placa de base" },
+  { id: "planoMetalico", codigo: "9.40", categoria: "Gerais", nome: "Plano metálico e/ou de madeira danificado, faltante ou com fixações falhas", descOpcoes: ["PLANO METÁLICO DANIFICADO", "PLANO METÁLICO FALTANTE", "PLANO METÁLICO COM FIXAÇÕES FALHAS", "PLANO DE MADEIRA DANIFICADO", "PLANO DE MADEIRA FALTANTE", "PLANO DE MADEIRA COM FIXAÇÕES FALHAS"], tipoOpcoes: ["LONGARINA SUPERIOR", "LONGARINA MÓVEL"], peca: "Plano metálico e/ou de madeira danificado, faltante ou com fixações falhas" },
+  { id: "suporteCentral", codigo: "9.41", categoria: "Estruturais", nome: "Suporte rack central faltante, danificado ou com fixações falhas", descOpcoes: ["DANIFICADO", "COM FALHAS NA FIXAÇÃO", "FALTANTE"], peca: "Suporte rack central faltante, danificado ou com fixações falhas" },
+  { id: "colunaGondola", codigo: "9.42", categoria: "Estruturais", nome: "Coluna da gôndola integrada danificada, faltante ou com fixações falhas", descOpcoes: ["DANIFICADA", "COM FALHAS NA FIXAÇÃO", "FALTANTE"], peca: "Coluna da gôndola integrada danificada, faltante ou com fixações falhas" },
+  { id: "stopper", codigo: "9.43", categoria: "Segurança", nome: "Perfil de segurança (stopper) danificado, faltante, com falha ou adaptado", descOpcoes: ["DANIFICADO", "FALTANTE", "COM FIXAÇÕES FALHAS", "ADAPTADO"], peca: "Perfil de segurança (stopper) danificado, faltante, com falha ou adaptado" },
+  { id: "contravFundo", codigo: "9.44", categoria: "Estruturais", nome: "Contraventamentos de fundo e/ou horizontais danificados, faltantes ou com falha", descOpcoes: ["CONTRAVENTAMENTOS DE FUNDO DANIFICADOS", "CONTRAVENTAMENTOS DE FUNDO FALTANTES", "CONTRAVENTAMENTOS DE FUNDO COM FIXAÇÕES FALHAS", "CONTRAVENTAMENTOS DE FUNDO COM FALHAS DE MONTAGEM", "CONTRAVENTAMENTOS HORIZONTAIS DANIFICADOS", "CONTRAVENTAMENTOS HORIZONTAIS FALTANTES", "CONTRAVENTAMENTOS HORIZONTAIS COM FIXAÇÕES FALHAS", "CONTRAVENTAMENTOS HORIZONTAIS COM FALHAS DE MONTAGEM"], peca: "Contraventamentos de fundo e/ou horizontais danificados, faltantes ou com falha" },
+  { id: "iluminacao", codigo: "9.45", categoria: "Iluminação", nome: "Aferição de iluminação nos corredores", tipo: "medicao", unidade: "lux", min: 200, peca: "Aferição de iluminação nos corredores" },
+  { id: "transversina", codigo: "9.46", categoria: "Estruturais", nome: "Transversina e/ou reforço faltante, danificado, torcido ou com falha", descOpcoes: ["DANIFICADA", "TORCIDA", "FALTANTE", "COM FALHAS NA FIXAÇÃO"], peca: "Transversina e/ou reforço faltante, danificado, torcido ou com falha" },
+  { id: "chapaLateral", codigo: "9.47", categoria: "Estruturais", nome: "Chapa de fechamento lateral do montante danificada, faltante ou com falha", descOpcoes: ["DANIFICADA", "FALTANTE", "COM FALHAS NA FIXAÇÃO"], peca: "Chapa de fechamento lateral do montante danificada, faltante ou com falha" },
+  { id: "roletes", codigo: "9.48", categoria: "Estruturais", nome: "Roletes faltantes, danificados ou com fixações falhas", descOpcoes: ["DANIFICADOS", "FALTANTES", "COM FALHAS NA FIXAÇÃO"], peca: "Roletes faltantes, danificados ou com fixações falhas" },
+  { id: "guiaEntrada", codigo: "9.49", categoria: "Estruturais", nome: "Guia de entrada dos paletes faltante, danificada ou com falha", descOpcoes: ["DANIFICADOS", "FALTANTES", "COM FALHAS NA FIXAÇÃO"], peca: "Guia de entrada dos paletes faltante, danificada ou com falha" },
+  { id: "trilho", codigo: "9.50", categoria: "Estruturais", nome: "Trilho de entrada e/ou trilho menor de saída faltante, danificado ou com falha", descOpcoes: ["TRILHO DE ENTRADA DANIFICADO", "TRILHO DE ENTRADA FALTANTE", "TRILHO DE ENTRADA COM FALHAS NA FIXAÇÃO", "TRILHO MENOR DE SAÍDA DANIFICADO", "TRILHO MENOR DE SAÍDA FALTANTE", "TRILHO MENOR DE SAÍDA COM FALHAS NA FIXAÇÃO"], peca: "Trilho de entrada e/ou trilho menor de saída faltante, danificado ou com falha" },
 ];
 const DEFAULT_CONFIG = {
   empresa: "Minha Empresa",
@@ -77,11 +93,14 @@ const DEFAULT_CONFIG = {
 const STATUS = {
   pendente: { label: "Pendente", short: "PEND", icon: "clock" },
   ok: { label: "Conforme", short: "OK", icon: "check" },
-  atencao: { label: "Atenção", short: "ATN", icon: "alert" },
-  critico: { label: "Crítico", short: "CRIT", icon: "xcirc" },
+  leve: { label: "Leve", short: "LEVE", icon: "alert" },
+  medio: { label: "Médio", short: "MÉD", icon: "alert" },
+  grave: { label: "Grave", short: "GRAVE", icon: "alert" },
+  gravissimo: { label: "Gravíssimo", short: "GRVS", icon: "xcirc" },
 };
-const SELECTABLE_STATUSES = ["ok", "atencao", "critico"];
-function isProblem(status) { return status === "atencao" || status === "critico"; }
+const GRAU_STATUSES = ["leve", "medio", "grave", "gravissimo"];
+const SEVERITY_ORDER = ["gravissimo", "grave", "medio", "leve", "pendente", "ok"];
+function isProblem(status) { return GRAU_STATUSES.includes(status); }
 
 /* ---------------- Utils ---------------- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -101,9 +120,9 @@ function fmtDateShort(isoDate) {
 }
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function overallStatus(itens) {
-  if (itens.some((i) => i.status === "critico")) return "critico";
-  if (itens.some((i) => i.status === "atencao")) return "atencao";
-  if (itens.some((i) => i.status === "pendente")) return "pendente";
+  for (const s of SEVERITY_ORDER) {
+    if (itens.some((i) => i.status === s)) return s;
+  }
   return "ok";
 }
 function vistoriaStatus(vistoria) {
@@ -112,10 +131,12 @@ function vistoriaStatus(vistoria) {
 }
 function statusFromMedicao(valor, min) {
   const v = parseFloat(String(valor).replace(",", "."));
-  if (isNaN(v)) return "ok";
+  if (isNaN(v)) return "pendente";
   if (v >= min) return "ok";
-  if (v >= min * 0.6) return "atencao";
-  return "critico";
+  if (v >= min * 0.75) return "leve";
+  if (v >= min * 0.5) return "medio";
+  if (v >= min * 0.25) return "grave";
+  return "gravissimo";
 }
 function resizeImage(file) {
   return new Promise((resolve, reject) => {
@@ -406,7 +427,7 @@ function newEstruturaSkeleton() {
   };
 }
 function newMontanteSkeleton(numero) {
-  return { id: uid(), numero, itens: state.config.itens.map((it) => ({ ...it, status: "pendente", obs: "", foto: null, valor: "", corte: "", qtd: 1, correcao: "" })) };
+  return { id: uid(), numero, itens: state.config.itens.map((it) => ({ ...it, status: "pendente", obs: "", foto: null, valor: "", corte: "", qtd: 1, correcao: "", descSel: [], tipoSel: [], localSel: [] })) };
 }
 function syncMontantes(e) {
   const target = parseInt(e.modulos, 10) || 0;
@@ -669,12 +690,11 @@ function ChecklistItemCard(item) {
   const card = Card({ class: "item-card" });
   card.appendChild(el("div", { style: "display:flex;justify-content:space-between;align-items:flex-start;gap:8px" },
     el("div", { class: "item-name" }, CodeBadge(item.codigo), item.nome),
-    Tag(item.status, "sm", item.niveis && item.niveis[item.status])));
-  card.appendChild(el("div", { class: "item-desc" }, item.desc));
+    Tag(item.status, "sm")));
 
   if (item.tipo === "medicao") {
     const row = el("div", { style: "display:flex;align-items:center;gap:8px" });
-    const input = el("input", { class: "input", type: "number", inputmode: "decimal", value: item.valor || "", placeholder: `Valor em ${item.unidade}`, style: "flex:1" });
+    const input = el("input", { class: "input", type: "number", inputmode: "decimal", value: item.valor || "", placeholder: `Valor em ${item.unidade} (mínimo ${item.min})`, style: "flex:1" });
     input.addEventListener("input", (e) => {
       item.valor = e.target.value;
       item.status = item.valor === "" ? "pendente" : statusFromMedicao(item.valor, item.min);
@@ -684,32 +704,33 @@ function ChecklistItemCard(item) {
     row.appendChild(input);
     card.appendChild(row);
   } else {
-    const statusRow = el("div", { class: "status-row" });
-    SELECTABLE_STATUSES.forEach((key) => {
-      const s = STATUS[key];
-      const custom = item.niveis && item.niveis[key];
-      const btn = el("button", { class: "status-btn" + (item.status === key ? " active-" + key : ""), title: custom || s.label },
-        el("span", { html: svg(s.icon, 15) }), s.short);
-      btn.addEventListener("click", () => {
-        item.status = key;
-        if (key === "ok") item.obs = "";
-        saveVistoriaDebounced();
-        render();
-      });
-      statusRow.appendChild(btn);
-    });
-    card.appendChild(statusRow);
-  }
+    const conformeRow = el("div", { class: "status-row" });
+    const btnOk = el("button", { class: "status-btn" + (item.status === "ok" ? " active-ok" : ""), title: "Conforme" }, el("span", { html: svg("check", 15) }), "CONFORME");
+    btnOk.addEventListener("click", () => { item.status = "ok"; item.obs = ""; item.descSel = []; item.tipoSel = []; item.localSel = []; saveVistoriaDebounced(); render(); });
+    const btnAnomalia = el("button", { class: "status-btn" + (isProblem(item.status) ? " active-medio" : ""), title: "Com anomalia" }, el("span", { html: svg("alert", 15) }), "COM ANOMALIA");
+    btnAnomalia.addEventListener("click", () => { if (!isProblem(item.status)) item.status = "medio"; saveVistoriaDebounced(); render(); });
+    conformeRow.appendChild(btnOk); conformeRow.appendChild(btnAnomalia);
+    card.appendChild(conformeRow);
 
-  if (item.niveis) {
-    const hint = el("div", { class: "niveis-hint" });
-    if (item.niveis.atencao) hint.appendChild(el("span", {}, "ATN: " + item.niveis.atencao));
-    if (item.niveis.critico) hint.appendChild(el("span", {}, "CRIT: " + item.niveis.critico));
-    card.appendChild(hint);
+    if (isProblem(item.status)) {
+      const grauRow = el("div", { class: "status-row", style: "margin-top:6px" });
+      GRAU_STATUSES.forEach((key) => {
+        const s = STATUS[key];
+        const btn = el("button", { class: "status-btn grau-btn" + (item.status === key ? " active-" + key : "") },
+          s.short);
+        btn.addEventListener("click", () => { item.status = key; saveVistoriaDebounced(); render(); });
+        grauRow.appendChild(btn);
+      });
+      card.appendChild(grauRow);
+    }
   }
 
   if (isProblem(item.status)) {
-    card.appendChild(Field("Corte / nível", inputEl(item.corte || "", (val) => { item.corte = val; saveVistoriaDebounced(); }, "Ex: CHÃO + 3")));
+    if (item.descOpcoes) card.appendChild(ChipMultiSelect("Descrição", item.descOpcoes, item.descSel, () => saveVistoriaDebounced()));
+    if (item.tipoOpcoes) card.appendChild(ChipMultiSelect("Tipo", item.tipoOpcoes, item.tipoSel, () => saveVistoriaDebounced()));
+    if (item.localOpcoes) card.appendChild(ChipMultiSelect(item.localLabel || "Localização", item.localOpcoes, item.localSel, () => saveVistoriaDebounced()));
+
+    card.appendChild(Field("Nível(is) afetado(s)", inputEl(item.corte || "", (val) => { item.corte = val; saveVistoriaDebounced(); }, "Ex: 1 a 5, ou 3")));
     card.appendChild(Field("Quantidade", inputEl(item.qtd == null ? 1 : item.qtd, (val) => { item.qtd = val; saveVistoriaDebounced(); }, "1", "number")));
 
     const obsBox = el("textarea", { class: "input", rows: 2, placeholder: "Observação (opcional)", style: "margin-top:10px;resize:vertical" });
@@ -722,6 +743,25 @@ function ChecklistItemCard(item) {
     card.appendChild(photoWrap);
   }
   return card;
+}
+function ChipMultiSelect(label, options, selectedArr, onChange) {
+  const wrap = el("div", { class: "field" }, el("label", {}, label + (selectedArr.length ? ` (${selectedArr.length} selecionada${selectedArr.length > 1 ? "s" : ""})` : "")));
+  const chipWrap = el("div", { class: "chip-select-wrap" });
+  options.forEach((opt) => {
+    const active = selectedArr.includes(opt);
+    const chip = el("button", { class: "chip-select" + (active ? " active" : "") }, opt);
+    chip.addEventListener("click", () => {
+      const idx = selectedArr.indexOf(opt);
+      if (idx >= 0) selectedArr.splice(idx, 1); else selectedArr.push(opt);
+      onChange();
+      chip.classList.toggle("active");
+      const lbl = wrap.querySelector("label");
+      lbl.textContent = label + (selectedArr.length ? ` (${selectedArr.length} selecionada${selectedArr.length > 1 ? "s" : ""})` : "");
+    });
+    chipWrap.appendChild(chip);
+  });
+  wrap.appendChild(chipWrap);
+  return wrap;
 }
 function renderPhotoArea(container, item) {
   container.innerHTML = "";
@@ -760,7 +800,7 @@ function HistoryScreen() {
 
   const chipRow = el("div", { class: "chip-row" });
   const resultsBox = el("div", {});
-  const filters = [["todos", "Todos"], ["ok", "Conforme"], ["atencao", "Atenção"], ["critico", "Crítico"], ["pendente", "Pendente"]];
+  const filters = [["todos", "Todos"], ["ok", "Conforme"], ["pendente", "Pendente"], ["leve", "Leve"], ["medio", "Médio"], ["grave", "Grave"], ["gravissimo", "Gravíssimo"]];
   function refresh() {
     chipRow.innerHTML = "";
     filters.forEach(([key, label]) => {
@@ -797,7 +837,7 @@ function ReportScreen() {
   const st = vistoriaStatus(v);
 
   const printable = el("div", { class: "screen printable" });
-  const bannerColor = { ok: "green", atencao: "amber", critico: "red", pendente: "gray" }[st];
+  const bannerColor = { ok: "green", pendente: "gray", leve: "leve", medio: "medio", grave: "grave", gravissimo: "gravissimo" }[st];
   const banner = el("div", { class: "card", style: `border:2px solid var(--${bannerColor});background:var(--${bannerColor}-bg);margin-bottom:16px` });
   banner.appendChild(el("img", { src: "logo-full.png", alt: state.config.empresa, style: "height:22px;display:block;margin-bottom:4px" }));
   banner.appendChild(el("div", { style: "font-family:'Oswald',sans-serif;font-size:22px;font-weight:700;margin-top:2px" }, v.lojaCd));
@@ -825,7 +865,7 @@ function ReportScreen() {
         const c = Card({ style: "padding:10px 12px" });
         c.appendChild(el("div", { style: "display:flex;justify-content:space-between;gap:8px" },
           el("div", { style: "font-weight:600;font-size:13.5px" }, CodeBadge(i.codigo), i.nome),
-          Tag(i.status, "sm", i.niveis && i.niveis[i.status])));
+          Tag(i.status, "sm")));
         c.appendChild(el("div", { class: "mono", style: "font-size:11px;color:var(--ink-faint);margin-top:3px" }, "Montante Nº " + m.numero));
         if (i.valor) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, `Medição: ${i.valor} ${i.unidade}`));
         if (i.obs) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, i.obs));
@@ -838,7 +878,7 @@ function ReportScreen() {
     const problemItems = problemEntries.map((x) => x.i);
     if (problemItems.length) {
       const agg = {};
-      problemItems.forEach((i) => { const q = Number(i.qtd) > 0 ? Number(i.qtd) : 1; agg[i.peca] = (agg[i.peca] || 0) + q; });
+      problemItems.forEach((i) => { const q = Number(i.qtd) > 0 ? Number(i.qtd) : 1; const p = pecaDoItem(i); agg[p] = (agg[p] || 0) + q; });
       const partsCard = Card({ style: "padding:4px;margin-bottom:8px" });
       Object.entries(agg).forEach(([peca, qtd], idx, arr) => {
         partsCard.appendChild(el("div", { style: "display:flex;justify-content:space-between;padding:8px 10px" + (idx < arr.length - 1 ? ";border-bottom:1px solid var(--line)" : "") },
@@ -878,7 +918,7 @@ async function shareReport(v, st) {
   (v.estruturas || []).forEach((e) => {
     const problemEntries = (e.montantes || []).flatMap((m) => m.itens.filter((i) => isProblem(i.status)).map((i) => ({ m, i })));
     text += `\n— Estrutura ${e.codigo} [${STATUS[estruturaStatus(e)].label}] —\n`;
-    text += problemEntries.length ? problemEntries.map(({ m, i }) => `  - Montante ${m.numero}: ${i.codigo ? "[" + i.codigo + "] " : ""}${i.nome} [${(i.niveis && i.niveis[i.status]) || STATUS[i.status].label}]${i.obs ? ": " + i.obs : ""}`).join("\n") : "  Nenhum apontamento — conforme.";
+    text += problemEntries.length ? problemEntries.map(({ m, i }) => `  - Montante ${m.numero}: ${i.codigo ? "[" + i.codigo + "] " : ""}${i.nome} [${STATUS[i.status].label}]${i.obs ? ": " + i.obs : ""}`).join("\n") : "  Nenhum apontamento — conforme.";
     text += "\n";
   });
   if (navigator.share) {
@@ -900,7 +940,8 @@ function buildAnomaliaRows(v) {
           setor: e.setor || "", tipoEstrutura: e.tipoEstrutura || "", numeroEstrutura: e.codigo || "",
           lado: e.lado || "", montante: m.numero, corte: i.corte || "",
           codigoAnomalia: i.codigo || "", nomeAnomalia: i.nome || "",
-          grau: (i.niveis && i.niveis[i.status]) || STATUS[i.status].label,
+          descricao: (i.descSel || []).join(" · "), tipo: (i.tipoSel || []).join(" · "), localizacao: (i.localSel || []).join(" · "),
+          grau: STATUS[i.status].label,
           categoria: i.categoria || "", correcao: i.correcao || "", qtd: i.qtd == null ? 1 : i.qtd,
           fabricante: e.fabricante || "",
         });
@@ -909,20 +950,24 @@ function buildAnomaliaRows(v) {
   });
   return rows;
 }
+function pecaDoItem(i) {
+  if (i.tipoSel && i.tipoSel.length) return i.tipoSel.join(" + ");
+  return i.peca;
+}
 function csvEscape(val) {
   const s = String(val === null || val === undefined ? "" : val);
   return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 function exportAnomaliasCsv(v) {
   const rows = buildAnomaliaRows(v);
-  const header = ["SETOR", "TIPO ESTRUTURA", "Nº ESTRUTURA", "LADO/POSIÇÃO", "MONTANTE", "CORTE", "ANOMALIA (CÓD.)", "ANOMALIA (DESCRIÇÃO)", "GRAU", "CATEGORIA", "CORREÇÃO", "QTD.", "FABRICANTE"];
+  const header = ["SETOR", "TIPO ESTRUTURA", "Nº ESTRUTURA", "LADO/POSIÇÃO", "MONTANTE", "NÍVEL", "ANOMALIA (CÓD.)", "ANOMALIA (DESCRIÇÃO)", "DESCRIÇÃO", "TIPO", "LOCALIZAÇÃO", "GRAU", "CATEGORIA", "CORREÇÃO", "QTD.", "FABRICANTE"];
   const lines = [
     "RELATÓRIO DE ANOMALIAS",
     `${v.lojaCd}${v.local ? ", " + v.local : ""}`,
     `${fmtDateShort(v.data)} - ${v.versao || "V.0"}`,
     "",
     header.join(";"),
-    ...rows.map((r) => [r.setor, r.tipoEstrutura, r.numeroEstrutura, r.lado, r.montante, r.corte, r.codigoAnomalia, r.nomeAnomalia, r.grau, r.categoria, r.correcao, r.qtd, r.fabricante].map(csvEscape).join(";")),
+    ...rows.map((r) => [r.setor, r.tipoEstrutura, r.numeroEstrutura, r.lado, r.montante, r.corte, r.codigoAnomalia, r.nomeAnomalia, r.descricao, r.tipo, r.localizacao, r.grau, r.categoria, r.correcao, r.qtd, r.fabricante].map(csvEscape).join(";")),
   ];
   download(`relatorio-anomalias-${(v.lojaCd || "inspecao").replace(/[^a-z0-9]+/gi, "-")}-${todayStr()}.csv`, "\uFEFF" + lines.join("\n"), "text/csv;charset=utf-8");
 }
@@ -951,7 +996,8 @@ function AnomaliasScreen() {
 
   const cols = [
     ["Setor", "setor"], ["Tipo estrutura", "tipoEstrutura"], ["Nº estrutura", "numeroEstrutura"], ["Lado", "lado"],
-    ["Montante", "montante"], ["Corte", "corte"], ["Cód.", "codigoAnomalia"], ["Anomalia", "nomeAnomalia"],
+    ["Montante", "montante"], ["Nível", "corte"], ["Cód.", "codigoAnomalia"], ["Anomalia", "nomeAnomalia"],
+    ["Descrição", "descricao"], ["Tipo", "tipo"], ["Localização", "localizacao"],
     ["Grau", "grau"], ["Categoria", "categoria"], ["Correção", "correcao"], ["Qtd.", "qtd"], ["Fabricante", "fabricante"],
   ];
   const scrollWrap = el("div", { style: "overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:10px;background:#fff" });
@@ -997,15 +1043,16 @@ function PartsScreen() {
       (e.montantes || []).forEach((m) => {
         m.itens.filter((i) => isProblem(i.status)).forEach((i) => {
           const q = Number(i.qtd) > 0 ? Number(i.qtd) : 1;
-          if (!agg[i.peca]) agg[i.peca] = { qtd: 0, locais: new Set(), pior: "atencao" };
-          agg[i.peca].qtd += q;
-          agg[i.peca].locais.add(`${e.codigo} (${v.lojaCd})`);
-          if (i.status === "critico") agg[i.peca].pior = "critico";
+          const p = pecaDoItem(i);
+          if (!agg[p]) agg[p] = { qtd: 0, locais: new Set(), pior: "leve" };
+          agg[p].qtd += q;
+          agg[p].locais.add(`${e.codigo} (${v.lojaCd})`);
+          if (SEVERITY_ORDER.indexOf(i.status) < SEVERITY_ORDER.indexOf(agg[p].pior)) agg[p].pior = i.status;
         });
       });
     });
   });
-  const rows = Object.entries(agg).sort((a, b) => (b[1].pior === "critico") - (a[1].pior === "critico"));
+  const rows = Object.entries(agg).sort((a, b) => SEVERITY_ORDER.indexOf(a[1].pior) - SEVERITY_ORDER.indexOf(b[1].pior));
   if (!rows.length) {
     wrap.appendChild(el("div", { class: "card empty" }, el("div", { html: svg("package", 26, "margin:0 auto 8px;opacity:.5;display:block") }), "Nenhuma peça pendente. Tudo em dia."));
     return wrap;
@@ -1148,14 +1195,14 @@ function ConfigScreen() {
   itensCard.appendChild(itensList);
   const codigoInput = el("input", { class: "input", placeholder: "Código interno (ex: 9.47) — opcional" });
   const nomeInput = el("input", { class: "input", placeholder: "Nome do item (ex: Guarda-corpo)" });
-  const descInput = el("input", { class: "input", placeholder: "Descrição do que verificar" });
+  const descInput = el("input", { class: "input", placeholder: "Descrição da anomalia (ex: Danificado, Faltante...)" });
   const categoriaInput = el("input", { class: "input", placeholder: "Categoria (ex: Estruturais, Segurança, Gerais, Iluminação)" });
   const pecaInput = el("input", { class: "input" });
   const addRow = el("div", { class: "row" });
   const addBtn = el("button", { class: "ghost-btn", html: svg("plus", 15) });
   addBtn.addEventListener("click", () => {
     if (nomeInput.value.trim() && pecaInput.value.trim()) {
-      local.itens.push({ id: uid(), codigo: codigoInput.value.trim(), nome: nomeInput.value.trim(), desc: descInput.value.trim(), categoria: categoriaInput.value.trim(), peca: pecaInput.value.trim() });
+      local.itens.push({ id: uid(), codigo: codigoInput.value.trim(), nome: nomeInput.value.trim(), descOpcoes: descInput.value.trim() ? [descInput.value.trim()] : undefined, categoria: categoriaInput.value.trim(), peca: pecaInput.value.trim() });
       codigoInput.value = ""; nomeInput.value = ""; descInput.value = ""; categoriaInput.value = ""; pecaInput.value = "";
       renderItens();
     }
