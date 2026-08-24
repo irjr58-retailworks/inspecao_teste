@@ -75,10 +75,13 @@ const DEFAULT_CONFIG = {
   itens: DEFAULT_ITEMS,
 };
 const STATUS = {
+  pendente: { label: "Pendente", short: "PEND", icon: "clock" },
   ok: { label: "Conforme", short: "OK", icon: "check" },
   atencao: { label: "Atenção", short: "ATN", icon: "alert" },
   critico: { label: "Crítico", short: "CRIT", icon: "xcirc" },
 };
+const SELECTABLE_STATUSES = ["ok", "atencao", "critico"];
+function isProblem(status) { return status === "atencao" || status === "critico"; }
 
 /* ---------------- Utils ---------------- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -100,6 +103,7 @@ function todayStr() { return new Date().toISOString().slice(0, 10); }
 function overallStatus(itens) {
   if (itens.some((i) => i.status === "critico")) return "critico";
   if (itens.some((i) => i.status === "atencao")) return "atencao";
+  if (itens.some((i) => i.status === "pendente")) return "pendente";
   return "ok";
 }
 function vistoriaStatus(vistoria) {
@@ -340,10 +344,8 @@ function suggestInput(value, onChange, placeholder, options) {
 function HomeScreen() {
   const wrap = el("div", { class: "screen" });
   const finalizadas = state.vistorias.filter((v) => v.finalizada);
-  const estruturasPendentes = finalizadas.flatMap((v) => (v.estruturas || []).filter((e) => !e.resolvido));
-  const critico = estruturasPendentes.filter((e) => estruturaStatus(e) === "critico").length;
-  const atencao = estruturasPendentes.filter((e) => estruturaStatus(e) === "atencao").length;
   const rascunhos = state.vistorias.filter((v) => !v.finalizada);
+  const totalEstruturas = state.vistorias.reduce((sum, v) => sum + (v.estruturas || []).length, 0);
 
   wrap.appendChild(el("div", { style: "margin-bottom:18px" },
     el("img", { src: "logo-full.png", alt: state.config.empresa, style: "height:34px;display:block;margin-bottom:8px" }),
@@ -354,9 +356,9 @@ function HomeScreen() {
     el("span", { html: svg("chevronRight", 18) })));
 
   const stats = el("div", { class: "stat-grid" },
-    el("div", { class: "card stat-card" }, el("div", { class: "stat-num" }, String(state.vistorias.length)), el("div", { class: "stat-label" }, "Concluídas e em andamento")),
-    el("div", { class: "card stat-card", style: atencao ? "background:var(--amber-bg)" : "" }, el("div", { class: "stat-num", style: "color:var(--amber-dark)" }, String(atencao)), el("div", { class: "stat-label", style: "color:var(--amber-dark)" }, "Atenção")),
-    el("div", { class: "card stat-card", style: critico ? "background:var(--red-bg)" : "" }, el("div", { class: "stat-num", style: "color:var(--red-dark)" }, String(critico)), el("div", { class: "stat-label", style: "color:var(--red-dark)" }, "Críticas")));
+    el("div", { class: "card stat-card" }, el("div", { class: "stat-num" }, String(finalizadas.length)), el("div", { class: "stat-label" }, "Concluídas")),
+    el("div", { class: "card stat-card" }, el("div", { class: "stat-num" }, String(rascunhos.length)), el("div", { class: "stat-label" }, "Em andamento")),
+    el("div", { class: "card stat-card" }, el("div", { class: "stat-num" }, String(totalEstruturas)), el("div", { class: "stat-label" }, "Estruturas inspecionadas")));
   wrap.appendChild(stats);
 
   if (rascunhos.length) {
@@ -404,7 +406,7 @@ function newEstruturaSkeleton() {
   };
 }
 function newMontanteSkeleton(numero) {
-  return { id: uid(), numero, itens: state.config.itens.map((it) => ({ ...it, status: "ok", obs: "", foto: null, valor: "", corte: "", qtd: 1, correcao: "" })) };
+  return { id: uid(), numero, itens: state.config.itens.map((it) => ({ ...it, status: "pendente", obs: "", foto: null, valor: "", corte: "", qtd: 1, correcao: "" })) };
 }
 function syncMontantes(e) {
   const target = parseInt(e.modulos, 10) || 0;
@@ -617,11 +619,15 @@ function EstruturaScreen() {
 }
 function MontanteRow(m, e, v) {
   const st = overallStatus(m.itens);
-  const pending = m.itens.filter((i) => i.status !== "ok").length;
+  const apontamentos = m.itens.filter((i) => isProblem(i.status)).length;
+  const naoInspecionados = m.itens.filter((i) => i.status === "pendente").length;
+  let sub = "Conforme";
+  if (apontamentos) sub = apontamentos + " com apontamento";
+  else if (naoInspecionados) sub = naoInspecionados + " item(ns) ainda não inspecionado(s)";
   const row = el("div", { class: "insp-row", onclick: () => go("montante", v.id, e.id, m.id) },
     el("div", {},
       el("div", { class: "insp-code" }, "Montante Nº " + m.numero),
-      el("div", { class: "insp-sub" }, pending ? pending + " com apontamento" : "Conforme")),
+      el("div", { class: "insp-sub" }, sub)),
     Tag(st, "sm"));
   return Card({ style: "padding:0;cursor:pointer" }, row);
 }
@@ -642,7 +648,7 @@ function MontanteScreen() {
   inner.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-faint);margin-bottom:10px" }, `Estrutura ${e.codigo || "—"} · Montante Nº ${m.numero}`));
   inner.appendChild(el("div", { id: "save-indicator", class: "save-indicator", style: "margin-bottom:10px" }, "✓ Salvo no aparelho"));
 
-  const pending = m.itens.filter((i) => i.status !== "ok").length;
+  const pending = m.itens.filter((i) => isProblem(i.status)).length;
   const headRow = el("div", { style: "display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px" },
     el("h3", { class: "section-title", style: "margin:0" }, `Checklist (${m.itens.length} itens)`));
   if (pending) headRow.appendChild(el("span", { style: "font-size:12px;color:var(--amber-dark);font-weight:600" }, pending + " com apontamento"));
@@ -661,7 +667,9 @@ function MontanteScreen() {
 
 function ChecklistItemCard(item) {
   const card = Card({ class: "item-card" });
-  card.appendChild(el("div", { class: "item-name" }, CodeBadge(item.codigo), item.nome));
+  card.appendChild(el("div", { style: "display:flex;justify-content:space-between;align-items:flex-start;gap:8px" },
+    el("div", { class: "item-name" }, CodeBadge(item.codigo), item.nome),
+    Tag(item.status, "sm", item.niveis && item.niveis[item.status])));
   card.appendChild(el("div", { class: "item-desc" }, item.desc));
 
   if (item.tipo === "medicao") {
@@ -669,17 +677,16 @@ function ChecklistItemCard(item) {
     const input = el("input", { class: "input", type: "number", inputmode: "decimal", value: item.valor || "", placeholder: `Valor em ${item.unidade}`, style: "flex:1" });
     input.addEventListener("input", (e) => {
       item.valor = e.target.value;
-      item.status = item.valor === "" ? "ok" : statusFromMedicao(item.valor, item.min);
+      item.status = item.valor === "" ? "pendente" : statusFromMedicao(item.valor, item.min);
       saveVistoriaDebounced();
-      const tagSlot = card.querySelector(".tag-slot");
-      if (tagSlot) { tagSlot.innerHTML = ""; if (item.valor !== "") tagSlot.appendChild(Tag(item.status, "sm")); }
+      render();
     });
     row.appendChild(input);
-    row.appendChild(el("span", { class: "tag-slot" }, item.valor !== "" ? Tag(item.status, "sm") : null));
     card.appendChild(row);
   } else {
     const statusRow = el("div", { class: "status-row" });
-    Object.entries(STATUS).forEach(([key, s]) => {
+    SELECTABLE_STATUSES.forEach((key) => {
+      const s = STATUS[key];
       const custom = item.niveis && item.niveis[key];
       const btn = el("button", { class: "status-btn" + (item.status === key ? " active-" + key : ""), title: custom || s.label },
         el("span", { html: svg(s.icon, 15) }), s.short);
@@ -701,7 +708,7 @@ function ChecklistItemCard(item) {
     card.appendChild(hint);
   }
 
-  if (item.status !== "ok") {
+  if (isProblem(item.status)) {
     card.appendChild(Field("Corte / nível", inputEl(item.corte || "", (val) => { item.corte = val; saveVistoriaDebounced(); }, "Ex: CHÃO + 3")));
     card.appendChild(Field("Quantidade", inputEl(item.qtd == null ? 1 : item.qtd, (val) => { item.qtd = val; saveVistoriaDebounced(); }, "1", "number")));
 
@@ -753,7 +760,7 @@ function HistoryScreen() {
 
   const chipRow = el("div", { class: "chip-row" });
   const resultsBox = el("div", {});
-  const filters = [["todos", "Todos"], ["ok", "Conforme"], ["atencao", "Atenção"], ["critico", "Crítico"]];
+  const filters = [["todos", "Todos"], ["ok", "Conforme"], ["atencao", "Atenção"], ["critico", "Crítico"], ["pendente", "Pendente"]];
   function refresh() {
     chipRow.innerHTML = "";
     filters.forEach(([key, label]) => {
@@ -790,7 +797,8 @@ function ReportScreen() {
   const st = vistoriaStatus(v);
 
   const printable = el("div", { class: "screen printable" });
-  const banner = el("div", { class: "card", style: `border:2px solid var(--${st === "ok" ? "green" : st === "atencao" ? "amber" : "red"});background:var(--${st === "ok" ? "green" : st === "atencao" ? "amber" : "red"}-bg);margin-bottom:16px` });
+  const bannerColor = { ok: "green", atencao: "amber", critico: "red", pendente: "gray" }[st];
+  const banner = el("div", { class: "card", style: `border:2px solid var(--${bannerColor});background:var(--${bannerColor}-bg);margin-bottom:16px` });
   banner.appendChild(el("img", { src: "logo-full.png", alt: state.config.empresa, style: "height:22px;display:block;margin-bottom:4px" }));
   banner.appendChild(el("div", { style: "font-family:'Oswald',sans-serif;font-size:22px;font-weight:700;margin-top:2px" }, v.lojaCd));
   banner.appendChild(el("div", { style: "font-size:13px;color:var(--ink-soft);margin-top:2px" }, [v.local, (v.estruturas || []).length + " estrutura(s)"].filter(Boolean).join(" · ")));
@@ -803,7 +811,7 @@ function ReportScreen() {
   (v.estruturas || []).forEach((e) => {
     const est = estruturaStatus(e);
     const allItens = estruturaItensFlat(e);
-    const problemEntries = (e.montantes || []).flatMap((m) => m.itens.filter((i) => i.status !== "ok").map((i) => ({ m, i })));
+    const problemEntries = (e.montantes || []).flatMap((m) => m.itens.filter((i) => isProblem(i.status)).map((i) => ({ m, i })));
     printable.appendChild(el("h3", { class: "section-title", style: "display:flex;align-items:center;justify-content:space-between" },
       el("span", {}, "Estrutura ", e.codigo || "—"), Tag(est, "sm")));
     const sub = [e.rua && "Rua " + e.rua, e.lado && "Lado " + e.lado, (e.montantes || []).length + " montante(s)", e.fabricante].filter(Boolean).join(" · ");
@@ -868,7 +876,7 @@ function ReportScreen() {
 async function shareReport(v, st) {
   let text = `Relatório de Inspeção — ${state.config.empresa}\nLoja/CD: ${v.lojaCd}${v.local ? " · " + v.local : ""}\nInspetor(es): ${v.inspetor}\nData: ${fmtDateOnly(v.data)}\nResultado geral: ${STATUS[st].label}\n`;
   (v.estruturas || []).forEach((e) => {
-    const problemEntries = (e.montantes || []).flatMap((m) => m.itens.filter((i) => i.status !== "ok").map((i) => ({ m, i })));
+    const problemEntries = (e.montantes || []).flatMap((m) => m.itens.filter((i) => isProblem(i.status)).map((i) => ({ m, i })));
     text += `\n— Estrutura ${e.codigo} [${STATUS[estruturaStatus(e)].label}] —\n`;
     text += problemEntries.length ? problemEntries.map(({ m, i }) => `  - Montante ${m.numero}: ${i.codigo ? "[" + i.codigo + "] " : ""}${i.nome} [${(i.niveis && i.niveis[i.status]) || STATUS[i.status].label}]${i.obs ? ": " + i.obs : ""}`).join("\n") : "  Nenhum apontamento — conforme.";
     text += "\n";
@@ -886,7 +894,7 @@ function buildAnomaliaRows(v) {
   const rows = [];
   (v.estruturas || []).forEach((e) => {
     (e.montantes || []).forEach((m) => {
-      m.itens.filter((i) => i.status !== "ok").forEach((i) => {
+      m.itens.filter((i) => isProblem(i.status)).forEach((i) => {
         rows.push({
           estruturaId: e.id, montanteId: m.id, itemId: i.id,
           setor: e.setor || "", tipoEstrutura: e.tipoEstrutura || "", numeroEstrutura: e.codigo || "",
@@ -985,9 +993,9 @@ function PartsScreen() {
   wrap.appendChild(el("p", { style: "font-size:13px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5" }, "Peças agregadas de todas as estruturas pendentes (não resolvidas), salvas neste aparelho."));
   const agg = {};
   state.vistorias.filter((v) => v.finalizada).forEach((v) => {
-    (v.estruturas || []).filter((e) => !e.resolvido && estruturaStatus(e) !== "ok").forEach((e) => {
+    (v.estruturas || []).filter((e) => !e.resolvido && isProblem(estruturaStatus(e))).forEach((e) => {
       (e.montantes || []).forEach((m) => {
-        m.itens.filter((i) => i.status !== "ok").forEach((i) => {
+        m.itens.filter((i) => isProblem(i.status)).forEach((i) => {
           const q = Number(i.qtd) > 0 ? Number(i.qtd) : 1;
           if (!agg[i.peca]) agg[i.peca] = { qtd: 0, locais: new Set(), pior: "atencao" };
           agg[i.peca].qtd += q;

@@ -17,6 +17,9 @@
   --green: #3B8C5A;
   --green-dark: #276B3E;
   --green-bg: #E7F3EA;
+  --gray: #9AA2AC;
+  --gray-dark: #5B6470;
+  --gray-bg: #E9EBEC;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -69,6 +72,7 @@ input, select, textarea { font-family: inherit; }
 .tag.ok { background: var(--green-bg); color: var(--green-dark); border-color: color-mix(in srgb, var(--green) 35%, transparent); }
 .tag.atencao { background: var(--amber-bg); color: var(--amber-dark); border-color: color-mix(in srgb, var(--amber) 35%, transparent); }
 .tag.critico { background: var(--red-bg); color: var(--red-dark); border-color: color-mix(in srgb, var(--red) 35%, transparent); }
+.tag.pendente { background: var(--gray-bg); color: var(--gray-dark); border-color: color-mix(in srgb, var(--gray) 35%, transparent); }
 
 .codebadge { display: inline-block; background: var(--steel); color: #fff; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-right: 7px; }
 
