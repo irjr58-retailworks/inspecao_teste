@@ -1061,45 +1061,67 @@ function AnomaliasScreen() {
 }
 
 /* ---------------- Peças ---------------- */
-function PartsScreen() {
-  const wrap = el("div", { class: "screen" });
-  wrap.appendChild(el("p", { style: "font-size:13px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5" }, "Peças agregadas de todas as estruturas pendentes (não resolvidas), salvas neste aparelho."));
-  const agg = {};
+function buildPartsByLocation() {
+  const locations = {};
   state.vistorias.filter((v) => v.finalizada).forEach((v) => {
+    const key = v.lojaCd || "(sem Loja/CD)";
     (v.estruturas || []).filter((e) => !e.resolvido && isProblem(estruturaStatus(e))).forEach((e) => {
       (e.montantes || []).forEach((m) => {
         m.itens.filter((i) => isProblem(i.status)).forEach((i) => {
           const q = Number(i.qtd) > 0 ? Number(i.qtd) : 1;
-          const p = pecaDoItem(i);
-          if (!agg[p]) agg[p] = { qtd: 0, locais: new Set(), pior: "problema" };
-          agg[p].qtd += q;
-          agg[p].locais.add(`${e.codigo} (${v.lojaCd})`);
-          if (SEVERITY_ORDER.indexOf(i.status) < SEVERITY_ORDER.indexOf(agg[p].pior)) agg[p].pior = i.status;
+          const peca = pecaDoItem(i);
+          if (!locations[key]) locations[key] = { local: v.local, itens: {} };
+          const bucket = locations[key].itens;
+          if (!bucket[peca]) bucket[peca] = { qtd: 0, graus: new Set(), refs: new Set() };
+          bucket[peca].qtd += q;
+          if (i.grauTxt) bucket[peca].graus.add(i.grauTxt);
+          bucket[peca].refs.add(`${e.codigo} · Montante ${m.numero}`);
         });
       });
     });
   });
-  const rows = Object.entries(agg).sort((a, b) => SEVERITY_ORDER.indexOf(a[1].pior) - SEVERITY_ORDER.indexOf(b[1].pior));
-  if (!rows.length) {
+  return locations;
+}
+function exportPartsCsv(locations) {
+  const header = ["LOJA/CD", "LOCAL", "PEÇA", "QUANTIDADE", "GRAU", "ESTRUTURAS / MONTANTES"];
+  const lines = ["LISTA GERAL DE PEÇAS", state.config.empresa, "", header.join(";")];
+  Object.entries(locations).forEach(([lojaCd, data]) => {
+    Object.entries(data.itens).forEach(([peca, info]) => {
+      lines.push([lojaCd, data.local || "", peca, info.qtd, [...info.graus].join(" · "), [...info.refs].join(" · ")].map(csvEscape).join(";"));
+    });
+  });
+  download(`lista-pecas-${todayStr()}.csv`, "\uFEFF" + lines.join("\n"), "text/csv;charset=utf-8");
+}
+function PartsScreen() {
+  const wrap = el("div", { class: "screen" });
+  wrap.appendChild(el("p", { style: "font-size:13px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5" }, "Lista geral de peças, agrupada por local inspecionado — pronta para emitir ao cliente."));
+
+  const locations = buildPartsByLocation();
+  const locEntries = Object.entries(locations);
+  if (!locEntries.length) {
     wrap.appendChild(el("div", { class: "card empty" }, el("div", { html: svg("package", 26, "margin:0 auto 8px;opacity:.5;display:block") }), "Nenhuma peça pendente. Tudo em dia."));
     return wrap;
   }
-  const list = el("div", { style: "display:flex;flex-direction:column;gap:8px" });
-  rows.forEach(([peca, info]) => {
-    const ordered = !!state.orderedParts[peca];
-    const card = Card({ style: "padding:12px" + (ordered ? ";opacity:.6" : "") });
-    card.appendChild(el("div", { style: "display:flex;justify-content:space-between;gap:8px" },
-      el("div", {}, el("div", { style: "font-weight:700;font-size:14px" + (ordered ? ";text-decoration:line-through" : "") }, peca), el("div", { style: "font-size:11.5px;color:var(--ink-faint);margin-top:2px" }, [...info.locais].join(" · "))),
-      el("div", { style: "display:flex;flex-direction:column;align-items:flex-end;gap:6px" }, el("span", { class: "mono", style: "font-size:13px;font-weight:700" }, "x" + info.qtd), Tag(info.pior, "sm"))));
-    const label = el("label", { style: "display:flex;align-items:center;gap:7px;margin-top:10px;font-size:12.5px;color:var(--ink-soft)" });
-    const cb = el("input", { type: "checkbox" });
-    cb.checked = ordered;
-    cb.addEventListener("change", async () => { state.orderedParts[peca] = cb.checked; await idbSet("parts", "main", state.orderedParts); render(); });
-    label.appendChild(cb); label.appendChild(document.createTextNode("Pedido de compra realizado"));
-    card.appendChild(label);
-    list.appendChild(card);
+
+  const exportBtn = el("button", { class: "ghost-btn", style: "width:100%;padding:12px;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px" },
+    el("span", { html: svg("download", 16) }), "Exportar CSV (para o cliente)");
+  exportBtn.addEventListener("click", () => exportPartsCsv(locations));
+  wrap.appendChild(exportBtn);
+
+  locEntries.forEach(([lojaCd, data]) => {
+    wrap.appendChild(el("h3", { class: "section-title" }, lojaCd + (data.local ? " · " + data.local : "")));
+    const list = el("div", { style: "display:flex;flex-direction:column;gap:8px;margin-bottom:18px" });
+    Object.entries(data.itens).forEach(([peca, info]) => {
+      const card = Card({ style: "padding:12px" });
+      card.appendChild(el("div", { style: "display:flex;justify-content:space-between;gap:8px" },
+        el("div", {}, el("div", { style: "font-weight:700;font-size:14px" }, peca), el("div", { style: "font-size:11.5px;color:var(--ink-faint);margin-top:2px" }, [...info.refs].join(" · "))),
+        el("div", { style: "display:flex;flex-direction:column;align-items:flex-end;gap:4px" },
+          el("span", { class: "mono", style: "font-size:13px;font-weight:700" }, "x" + info.qtd),
+          info.graus.size ? el("span", { style: "font-size:11px;color:var(--amber-dark);font-weight:600" }, [...info.graus].join(" · ")) : null)));
+      list.appendChild(card);
+    });
+    wrap.appendChild(list);
   });
-  wrap.appendChild(list);
   return wrap;
 }
 
