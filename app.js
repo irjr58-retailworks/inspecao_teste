@@ -1,6 +1,6 @@
 /* ==========================================================
    Inspeção Porta-Pallet — PWA offline-first
-   Hierarquia: VISTORIA (Loja/CD, Local, Data, Inspetor)
+   Hierarquia: INSPEÇÃO (Loja/CD, Local, Data, Inspetor)
              → várias ESTRUTURAS, cada uma com o checklist 9.x
    Tudo salvo em IndexedDB (no aparelho), passo a passo.
    ========================================================== */
@@ -103,7 +103,7 @@ function overallStatus(itens) {
   return "ok";
 }
 function vistoriaStatus(vistoria) {
-  const all = (vistoria.estruturas || []).flatMap((e) => e.itens);
+  const all = (vistoria.estruturas || []).flatMap((e) => estruturaItensFlat(e));
   return all.length ? overallStatus(all) : "ok";
 }
 function statusFromMedicao(valor, min) {
@@ -212,6 +212,7 @@ const state = {
   screen: "home",
   activeVistoriaId: null,
   activeEstruturaId: null,
+  activeMontanteId: null,
   draftVistoria: null,
   saveTimer: null,
 };
@@ -234,8 +235,8 @@ function updateOfflineBanner() {
 async function persistVistoriaList() {
   state.vistorias = (await idbGetAll("vistorias")).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
-function go(screen, vistoriaId = null, estruturaId = null) {
-  state.screen = screen; state.activeVistoriaId = vistoriaId; state.activeEstruturaId = estruturaId;
+function go(screen, vistoriaId = null, estruturaId = null, montanteId = null) {
+  state.screen = screen; state.activeVistoriaId = vistoriaId; state.activeEstruturaId = estruturaId; state.activeMontanteId = montanteId;
   render();
   window.scrollTo(0, 0);
 }
@@ -247,8 +248,10 @@ function render() {
   app.appendChild(el("div", { id: "offline-banner", class: "offline-banner" + (!navigator.onLine ? " show" : "") }, "Sem conexão — os dados continuam sendo salvos normalmente no aparelho."));
 
   const estAtual = state.draftVistoria && (state.draftVistoria.estruturas || []).find((e) => e.id === state.activeEstruturaId);
+  const montAtual = estAtual && (estAtual.montantes || []).find((m) => m.id === state.activeMontanteId);
   const titles = {
-    home: "Início", vistoria: "Vistoria", estrutura: (estAtual && estAtual.codigo) || "Nova estrutura",
+    home: "Início", vistoria: "Inspeção", estrutura: (estAtual && estAtual.codigo) || "Nova estrutura",
+    montante: montAtual ? "Montante Nº " + montAtual.numero : "Montante",
     history: "Histórico", parts: "Lista de peças", config: "Configurações",
     report: (state.vistorias.find((v) => v.id === state.activeVistoriaId) || {}).lojaCd || "Relatório",
     anomalias: "Relatório de Anomalias",
@@ -256,6 +259,7 @@ function render() {
   const backTargets = {
     vistoria: () => go("home"),
     estrutura: () => go("vistoria", state.draftVistoria.id),
+    montante: () => go("estrutura", state.draftVistoria.id, state.activeEstruturaId),
     history: () => go("home"),
     parts: () => go("home"),
     config: () => go("home"),
@@ -268,6 +272,7 @@ function render() {
   if (state.screen === "home") body.appendChild(HomeScreen());
   if (state.screen === "vistoria") body.appendChild(VistoriaScreen());
   if (state.screen === "estrutura") body.appendChild(EstruturaScreen());
+  if (state.screen === "montante") body.appendChild(MontanteScreen());
   if (state.screen === "history") body.appendChild(HistoryScreen());
   if (state.screen === "parts") body.appendChild(PartsScreen());
   if (state.screen === "config") body.appendChild(ConfigScreen());
@@ -285,12 +290,12 @@ function TopBar(title, onBack) {
 }
 function BottomNav() {
   const items = [
-    ["home", "Início", "home"], ["vistoria", "Vistoria", "plusCircle"], ["history", "Histórico", "clock"],
+    ["home", "Início", "home"], ["vistoria", "Inspeção", "plusCircle"], ["history", "Histórico", "clock"],
     ["parts", "Peças", "package"], ["config", "Ajustes", "settings"],
   ];
   const nav = el("div", { class: "bottomnav no-print" });
   items.forEach(([id, label, icon]) => {
-    const active = id === state.screen || (id === "vistoria" && state.screen === "estrutura");
+    const active = id === state.screen || (id === "vistoria" && (state.screen === "estrutura" || state.screen === "montante"));
     const btn = el("button", { class: active ? "active" : "", onclick: () => go(id === "vistoria" ? "vistoria" : id) },
       el("span", { html: svg(icon, 20) }), el("span", { class: "label" }, label));
     nav.appendChild(btn);
@@ -319,14 +324,25 @@ function selectEl(options, value, onChange) {
   select.addEventListener("change", (e) => onChange(e.target.value));
   return select;
 }
+function suggestInput(value, onChange, placeholder, options) {
+  const listId = "dl-" + uid();
+  const input = el("input", { class: "input", value: value || "", placeholder: placeholder || "", list: listId, autocomplete: "off" });
+  input.addEventListener("input", (e) => onChange(e.target.value));
+  const datalist = el("datalist", { id: listId });
+  (options || []).forEach((o) => datalist.appendChild(el("option", { value: o })));
+  const frag = document.createDocumentFragment();
+  frag.appendChild(input);
+  frag.appendChild(datalist);
+  return frag;
+}
 
 /* ---------------- Home ---------------- */
 function HomeScreen() {
   const wrap = el("div", { class: "screen" });
   const finalizadas = state.vistorias.filter((v) => v.finalizada);
   const estruturasPendentes = finalizadas.flatMap((v) => (v.estruturas || []).filter((e) => !e.resolvido));
-  const critico = estruturasPendentes.filter((e) => overallStatus(e.itens) === "critico").length;
-  const atencao = estruturasPendentes.filter((e) => overallStatus(e.itens) === "atencao").length;
+  const critico = estruturasPendentes.filter((e) => estruturaStatus(e) === "critico").length;
+  const atencao = estruturasPendentes.filter((e) => estruturaStatus(e) === "atencao").length;
   const rascunhos = state.vistorias.filter((v) => !v.finalizada);
 
   wrap.appendChild(el("div", { style: "margin-bottom:18px" },
@@ -334,30 +350,30 @@ function HomeScreen() {
     el("h2", { style: "font-size:26px;margin-top:2px" }, "Inspeção de Porta-Pallets")));
 
   wrap.appendChild(el("button", { class: "cta", onclick: () => go("vistoria") },
-    el("span", { style: "display:flex;align-items:center;gap:10px" }, el("span", { html: svg("building", 20) }), "Nova vistoria"),
+    el("span", { style: "display:flex;align-items:center;gap:10px" }, el("span", { html: svg("building", 20) }), "Nova inspeção"),
     el("span", { html: svg("chevronRight", 18) })));
 
   const stats = el("div", { class: "stat-grid" },
-    el("div", { class: "card stat-card" }, el("div", { class: "stat-num" }, String(finalizadas.length)), el("div", { class: "stat-label" }, "Vistorias")),
+    el("div", { class: "card stat-card" }, el("div", { class: "stat-num" }, String(state.vistorias.length)), el("div", { class: "stat-label" }, "Concluídas e em andamento")),
     el("div", { class: "card stat-card", style: atencao ? "background:var(--amber-bg)" : "" }, el("div", { class: "stat-num", style: "color:var(--amber-dark)" }, String(atencao)), el("div", { class: "stat-label", style: "color:var(--amber-dark)" }, "Atenção")),
     el("div", { class: "card stat-card", style: critico ? "background:var(--red-bg)" : "" }, el("div", { class: "stat-num", style: "color:var(--red-dark)" }, String(critico)), el("div", { class: "stat-label", style: "color:var(--red-dark)" }, "Críticas")));
   wrap.appendChild(stats);
 
   if (rascunhos.length) {
-    wrap.appendChild(el("h3", { class: "section-title" }, "Vistorias em andamento (salvas no aparelho)"));
+    wrap.appendChild(el("h3", { class: "section-title" }, "Inspeções em andamento (salvas no aparelho)"));
     const list = el("div", { style: "display:flex;flex-direction:column;gap:8px;margin-bottom:18px" });
     rascunhos.forEach((v) => list.appendChild(VistoriaRow(v, true)));
     wrap.appendChild(list);
   }
 
   const head = el("div", { style: "display:flex;align-items:center;justify-content:space-between;margin-bottom:8px" },
-    el("h3", { class: "section-title", style: "margin:0" }, "Recentes"));
+    el("h3", { class: "section-title", style: "margin:0" }, "Inspeções finalizadas"));
   if (finalizadas.length) head.appendChild(el("button", { style: "background:none;border:none;color:var(--ink-faint);font-size:12.5px", onclick: () => go("history") }, "ver tudo"));
   wrap.appendChild(head);
 
   const recentes = finalizadas.slice(0, 5);
   if (!recentes.length) {
-    wrap.appendChild(el("div", { class: "card empty" }, el("div", { html: svg("clock", 26, "margin:0 auto 8px;opacity:.5;display:block") }), "Nenhuma vistoria concluída ainda."));
+    wrap.appendChild(el("div", { class: "card empty" }, el("div", { html: svg("clock", 26, "margin:0 auto 8px;opacity:.5;display:block") }), "Nenhuma inspeção concluída ainda."));
   } else {
     const list = el("div", { style: "display:flex;flex-direction:column;gap:8px" });
     recentes.forEach((v) => list.appendChild(VistoriaRow(v, false)));
@@ -376,7 +392,7 @@ function VistoriaRow(v, isDraft) {
   return Card({ style: "padding:0;cursor:pointer" }, row);
 }
 
-/* ---------------- Vistoria (Loja/CD + lista de Estruturas) ---------------- */
+/* ---------------- Inspeção (Loja/CD + lista de Estruturas) ---------------- */
 function newVistoriaSkeleton() {
   return { id: uid(), lojaCd: (state.config.locais || [])[0] || "", local: "", data: todayStr(), inspetor: "", versao: "V.0", createdAt: new Date().toISOString(), finalizada: false, estruturas: [] };
 }
@@ -384,8 +400,21 @@ function newEstruturaSkeleton() {
   return {
     id: uid(), codigo: "", setor: (state.config.setores || [])[0] || "", tipoEstrutura: (state.config.tiposEstrutura || [])[0] || "",
     rua: "", lado: "", modulos: "", fabricante: (state.config.fabricantes || [])[0] || "", resolvido: false,
-    itens: state.config.itens.map((it) => ({ ...it, status: "ok", obs: "", foto: null, valor: "", montante: "", corte: "", qtd: 1, correcao: "" })),
+    montantes: [],
   };
+}
+function newMontanteSkeleton(numero) {
+  return { id: uid(), numero, itens: state.config.itens.map((it) => ({ ...it, status: "ok", obs: "", foto: null, valor: "", corte: "", qtd: 1, correcao: "" })) };
+}
+function syncMontantes(e) {
+  const target = parseInt(e.modulos, 10) || 0;
+  e.montantes = e.montantes || [];
+  for (let n = e.montantes.length + 1; n <= target; n++) e.montantes.push(newMontanteSkeleton(n));
+}
+function estruturaItensFlat(e) { return (e.montantes || []).flatMap((m) => m.itens); }
+function estruturaStatus(e) {
+  const all = estruturaItensFlat(e);
+  return all.length ? overallStatus(all) : "ok";
 }
 async function ensureVistoria(id) {
   if (id) {
@@ -424,19 +453,13 @@ function VistoriaScreen() {
   const header = Card({ style: "margin-bottom:14px" });
   header.appendChild(el("div", { class: "field" }, el("label", {}, "Loja / CD"),
     (() => {
-      const row = el("div", { class: "row" });
-      row.appendChild(selectEl(state.config.locais, v.lojaCd, (val) => { v.lojaCd = val; saveVistoriaDebounced(); }));
-      const addBtn = el("button", { class: "ghost-btn" }, "+ novo");
-      addBtn.addEventListener("click", () => {
-        const novo = prompt("Nome da nova Loja / CD:");
-        if (novo && novo.trim()) {
-          if (!state.config.locais.includes(novo.trim())) state.config.locais.push(novo.trim());
-          idbSet("config", "main", state.config);
-          v.lojaCd = novo.trim(); saveVistoriaDebounced(); render();
-        }
+      const frag = suggestInput(v.lojaCd, (val) => { v.lojaCd = val; saveVistoriaDebounced(); }, "Digite o nome da Loja / CD", state.config.locais);
+      const input = frag.querySelector("input");
+      input.addEventListener("blur", () => {
+        const val = input.value.trim();
+        if (val && !state.config.locais.includes(val)) { state.config.locais.push(val); idbSet("config", "main", state.config); }
       });
-      row.appendChild(addBtn);
-      return row;
+      return frag;
     })()));
   header.appendChild(Field("Local (cidade/UF)", inputEl(v.local, (val) => { v.local = val; saveVistoriaDebounced(); }, "Ex: Osasco - SP")));
   header.appendChild(el("div", { class: "row2" },
@@ -469,16 +492,17 @@ function VistoriaScreen() {
   inner.appendChild(errBox);
 
   const submitWrap = el("div", { class: "sticky-submit no-print" },
-    el("button", { class: "submit-btn", onclick: () => submitVistoria(v, errBox) }, "Concluir vistoria"));
+    el("button", { class: "submit-btn", onclick: () => submitVistoria(v, errBox) }, "Concluir inspeção"));
   wrap.appendChild(submitWrap);
   return wrap;
 }
 function EstruturaRow(e, v) {
-  const st = overallStatus(e.itens);
+  const st = estruturaStatus(e);
+  const nMont = (e.montantes || []).length;
   const row = el("div", { class: "insp-row", onclick: () => go("estrutura", v.id, e.id) },
     el("div", {},
       el("div", { class: "insp-code" }, e.codigo || "(sem código ainda)"),
-      el("div", { class: "insp-sub" }, [e.rua && "Rua " + e.rua, e.lado && "Lado " + e.lado, e.modulos && e.modulos + " módulos"].filter(Boolean).join(" · ") || "Toque para preencher o checklist")),
+      el("div", { class: "insp-sub" }, [e.rua && "Rua " + e.rua, e.lado && "Lado " + e.lado, nMont + " montante" + (nMont === 1 ? "" : "s")].filter(Boolean).join(" · "))),
     el("div", { style: "display:flex;align-items:center;gap:8px" },
       Tag(st, "sm"),
       (() => { const b = el("button", { style: "background:none;border:none;color:var(--ink-faint)", html: svg("trash", 15) }); b.addEventListener("click", (ev) => { ev.stopPropagation(); if (confirm("Remover esta estrutura da vistoria?")) { v.estruturas = v.estruturas.filter((x) => x.id !== e.id); saveVistoriaNow().then(render); } }); return b; })()));
@@ -516,30 +540,121 @@ function EstruturaScreen() {
   const header = Card({ style: "margin-bottom:14px" });
   header.appendChild(Field("Código da estrutura", inputEl(e.codigo, (val) => { e.codigo = val; saveVistoriaDebounced(); }, "Ex: 03/04 (PRUMO E LUX)")));
   header.appendChild(el("div", { class: "row2" },
-    Field("Setor", selectEl(state.config.setores || [], e.setor, (val) => { e.setor = val; saveVistoriaDebounced(); })),
-    Field("Tipo de estrutura", selectEl(state.config.tiposEstrutura || [], e.tipoEstrutura, (val) => { e.tipoEstrutura = val; saveVistoriaDebounced(); }))));
+    (() => {
+      const fieldWrap = el("div", { class: "field" }, el("label", {}, "Setor"));
+      const frag = suggestInput(e.setor, (val) => { e.setor = val; saveVistoriaDebounced(); }, "Digite o setor", state.config.setores);
+      const input = frag.querySelector("input");
+      input.addEventListener("blur", () => {
+        const val = input.value.trim();
+        if (val && !state.config.setores.includes(val)) { state.config.setores.push(val); idbSet("config", "main", state.config); }
+      });
+      fieldWrap.appendChild(frag);
+      return fieldWrap;
+    })(),
+    (() => {
+      const fieldWrap = el("div", { class: "field" }, el("label", {}, "Tipo de estrutura"));
+      const frag = suggestInput(e.tipoEstrutura, (val) => { e.tipoEstrutura = val; saveVistoriaDebounced(); }, "Digite o tipo", state.config.tiposEstrutura);
+      const input = frag.querySelector("input");
+      input.addEventListener("blur", () => {
+        const val = input.value.trim();
+        if (val && !state.config.tiposEstrutura.includes(val)) { state.config.tiposEstrutura.push(val); idbSet("config", "main", state.config); }
+      });
+      fieldWrap.appendChild(frag);
+      return fieldWrap;
+    })()));
   header.appendChild(el("div", { class: "row2" },
     Field("Rua", inputEl(e.rua, (val) => { e.rua = val; saveVistoriaDebounced(); }, "Ex: 03")),
     Field("Lado", inputEl(e.lado, (val) => { e.lado = val; saveVistoriaDebounced(); }, "Ex: ímpar"))));
   header.appendChild(el("div", { class: "row2" },
-    Field("Qtd. módulos", inputEl(e.modulos, (val) => { e.modulos = val; saveVistoriaDebounced(); }, "Ex: 32")),
-    Field("Fabricante", selectEl(state.config.fabricantes || [], e.fabricante, (val) => { e.fabricante = val; saveVistoriaDebounced(); }))));
+    (() => {
+      const fieldWrap = el("div", { class: "field" }, el("label", {}, "Qtd. módulos"));
+      const input = inputEl(e.modulos, (val) => { e.modulos = val; saveVistoriaDebounced(); }, "Ex: 32", "number");
+      input.addEventListener("blur", () => { syncMontantes(e); saveVistoriaNow().then(render); });
+      fieldWrap.appendChild(input);
+      return fieldWrap;
+    })(),
+    (() => {
+      const fieldWrap = el("div", { class: "field" }, el("label", {}, "Fabricante"));
+      const frag = suggestInput(e.fabricante, (val) => { e.fabricante = val; saveVistoriaDebounced(); }, "Digite o fabricante", state.config.fabricantes);
+      const input = frag.querySelector("input");
+      input.addEventListener("blur", () => {
+        const val = input.value.trim();
+        if (val && !state.config.fabricantes.includes(val)) { state.config.fabricantes.push(val); idbSet("config", "main", state.config); }
+      });
+      fieldWrap.appendChild(frag);
+      return fieldWrap;
+    })()));
   header.appendChild(el("div", { id: "save-indicator", class: "save-indicator" }, "✓ Salvo no aparelho"));
   inner.appendChild(header);
 
-  const pending = e.itens.filter((i) => i.status !== "ok").length;
+  const montHead = el("div", { style: "display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px" },
+    el("h3", { class: "section-title", style: "margin:0" }, `Montantes (${(e.montantes || []).length})`));
+  inner.appendChild(montHead);
+
+  const target = parseInt(e.modulos, 10) || 0;
+  if (target > (e.montantes || []).length) {
+    const syncBar = el("div", { style: "display:flex;align-items:center;justify-content:space-between;background:var(--amber-bg);color:var(--amber-dark);padding:8px 12px;border-radius:8px;font-size:12.5px;margin-bottom:10px" },
+      el("span", {}, `Faltam ${target - (e.montantes || []).length} montante(s) para bater com a Qtd. módulos.`));
+    const syncBtn = el("button", { class: "ghost-btn", style: "background:#fff" }, "Gerar agora");
+    syncBtn.addEventListener("click", async () => { syncMontantes(e); await saveVistoriaNow(); render(); });
+    syncBar.appendChild(syncBtn);
+    inner.appendChild(syncBar);
+  }
+
+  const montList = el("div", { style: "display:flex;flex-direction:column;gap:8px;margin-bottom:14px" });
+  (e.montantes || []).forEach((m) => montList.appendChild(MontanteRow(m, e, v)));
+  inner.appendChild(montList);
+
+  if (!(e.montantes || []).length) {
+    inner.appendChild(el("div", { class: "card empty" }, "Informe a Qtd. módulos acima para gerar os montantes automaticamente."));
+  }
+
+  const submitWrap = el("div", { class: "sticky-submit no-print" },
+    el("button", { class: "submit-btn" }, "Voltar para a inspeção"));
+  submitWrap.querySelector("button").addEventListener("click", async () => { clearTimeout(state.saveTimer); await saveVistoriaNow(); go("vistoria", v.id); });
+  wrap.appendChild(submitWrap);
+  return wrap;
+}
+function MontanteRow(m, e, v) {
+  const st = overallStatus(m.itens);
+  const pending = m.itens.filter((i) => i.status !== "ok").length;
+  const row = el("div", { class: "insp-row", onclick: () => go("montante", v.id, e.id, m.id) },
+    el("div", {},
+      el("div", { class: "insp-code" }, "Montante Nº " + m.numero),
+      el("div", { class: "insp-sub" }, pending ? pending + " com apontamento" : "Conforme")),
+    Tag(st, "sm"));
+  return Card({ style: "padding:0;cursor:pointer" }, row);
+}
+
+/* ---------------- Montante (checklist 9.x) ---------------- */
+function MontanteScreen() {
+  const wrap = el("div", { style: "padding-bottom:90px" });
+  const inner = el("div", { class: "screen", style: "padding-top:16px" });
+  wrap.appendChild(inner);
+
+  const v = state.draftVistoria;
+  if (!v) { inner.appendChild(el("div", { class: "empty" }, "Carregando…")); return wrap; }
+  const e = (v.estruturas || []).find((x) => x.id === state.activeEstruturaId);
+  if (!e) { inner.appendChild(el("div", { class: "empty" }, "Estrutura não encontrada.")); return wrap; }
+  const m = (e.montantes || []).find((x) => x.id === state.activeMontanteId);
+  if (!m) { inner.appendChild(el("div", { class: "empty" }, "Montante não encontrado.")); return wrap; }
+
+  inner.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-faint);margin-bottom:10px" }, `Estrutura ${e.codigo || "—"} · Montante Nº ${m.numero}`));
+  inner.appendChild(el("div", { id: "save-indicator", class: "save-indicator", style: "margin-bottom:10px" }, "✓ Salvo no aparelho"));
+
+  const pending = m.itens.filter((i) => i.status !== "ok").length;
   const headRow = el("div", { style: "display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px" },
-    el("h3", { class: "section-title", style: "margin:0" }, `Checklist (${e.itens.length} itens)`));
+    el("h3", { class: "section-title", style: "margin:0" }, `Checklist (${m.itens.length} itens)`));
   if (pending) headRow.appendChild(el("span", { style: "font-size:12px;color:var(--amber-dark);font-weight:600" }, pending + " com apontamento"));
   inner.appendChild(headRow);
 
   const list = el("div", {});
-  e.itens.forEach((it) => list.appendChild(ChecklistItemCard(it)));
+  m.itens.forEach((it) => list.appendChild(ChecklistItemCard(it)));
   inner.appendChild(list);
 
   const submitWrap = el("div", { class: "sticky-submit no-print" },
-    el("button", { class: "submit-btn" }, "Voltar para a vistoria"));
-  submitWrap.querySelector("button").addEventListener("click", async () => { clearTimeout(state.saveTimer); await saveVistoriaNow(); go("vistoria", v.id); });
+    el("button", { class: "submit-btn" }, "Voltar para a estrutura"));
+  submitWrap.querySelector("button").addEventListener("click", async () => { clearTimeout(state.saveTimer); await saveVistoriaNow(); go("estrutura", v.id, e.id); });
   wrap.appendChild(submitWrap);
   return wrap;
 }
@@ -587,10 +702,7 @@ function ChecklistItemCard(item) {
   }
 
   if (item.status !== "ok") {
-    const gridRow = el("div", { class: "row2", style: "margin-top:10px" },
-      Field("Montante(s) afetado(s)", inputEl(item.montante || "", (val) => { item.montante = val; saveVistoriaDebounced(); }, "Ex: 1, 3")),
-      Field("Corte / nível", inputEl(item.corte || "", (val) => { item.corte = val; saveVistoriaDebounced(); }, "Ex: CHÃO + 3")));
-    card.appendChild(gridRow);
+    card.appendChild(Field("Corte / nível", inputEl(item.corte || "", (val) => { item.corte = val; saveVistoriaDebounced(); }, "Ex: CHÃO + 3")));
     card.appendChild(Field("Quantidade", inputEl(item.qtd == null ? 1 : item.qtd, (val) => { item.qtd = val; saveVistoriaDebounced(); }, "1", "number")));
 
     const obsBox = el("textarea", { class: "input", rows: 2, placeholder: "Observação (opcional)", style: "margin-top:10px;resize:vertical" });
@@ -658,7 +770,7 @@ function HistoryScreen() {
       return (v.lojaCd || "").toLowerCase().includes(q) || (v.local || "").toLowerCase().includes(q) || (v.inspetor || "").toLowerCase().includes(q);
     });
     resultsBox.innerHTML = "";
-    if (!filtered.length) { resultsBox.appendChild(el("div", { class: "card empty" }, "Nenhuma vistoria encontrada.")); return; }
+    if (!filtered.length) { resultsBox.appendChild(el("div", { class: "card empty" }, "Nenhuma inspeção encontrada.")); return; }
     const list = el("div", { style: "display:flex;flex-direction:column;gap:8px" });
     filtered.forEach((v) => list.appendChild(VistoriaRow(v, false)));
     resultsBox.appendChild(list);
@@ -674,7 +786,7 @@ function HistoryScreen() {
 function ReportScreen() {
   const wrap = el("div", {});
   const v = state.vistorias.find((x) => x.id === state.activeVistoriaId);
-  if (!v) { wrap.appendChild(el("div", { class: "screen empty" }, "Vistoria não encontrada.")); return wrap; }
+  if (!v) { wrap.appendChild(el("div", { class: "screen empty" }, "Inspeção não encontrada.")); return wrap; }
   const st = vistoriaStatus(v);
 
   const printable = el("div", { class: "screen printable" });
@@ -689,26 +801,33 @@ function ReportScreen() {
   printable.appendChild(banner);
 
   (v.estruturas || []).forEach((e) => {
-    const est = overallStatus(e.itens);
-    const problemItems = e.itens.filter((i) => i.status !== "ok");
+    const est = estruturaStatus(e);
+    const allItens = estruturaItensFlat(e);
+    const problemEntries = (e.montantes || []).flatMap((m) => m.itens.filter((i) => i.status !== "ok").map((i) => ({ m, i })));
     printable.appendChild(el("h3", { class: "section-title", style: "display:flex;align-items:center;justify-content:space-between" },
-      el("span", {}, CodeBadge(""), "Estrutura ", e.codigo || "—"), Tag(est, "sm")));
-    const sub = [e.rua && "Rua " + e.rua, e.lado && "Lado " + e.lado, e.modulos && e.modulos + " módulos", e.fabricante].filter(Boolean).join(" · ");
+      el("span", {}, "Estrutura ", e.codigo || "—"), Tag(est, "sm")));
+    const sub = [e.rua && "Rua " + e.rua, e.lado && "Lado " + e.lado, (e.montantes || []).length + " montante(s)", e.fabricante].filter(Boolean).join(" · ");
     if (sub) printable.appendChild(el("div", { style: "font-size:12px;color:var(--ink-faint);margin:-4px 0 8px" }, sub));
 
-    const itemsList = el("div", { style: "display:flex;flex-direction:column;gap:8px;margin-bottom:10px" });
-    e.itens.forEach((it) => {
-      const c = Card({ style: "padding:10px 12px" });
-      c.appendChild(el("div", { style: "display:flex;justify-content:space-between;gap:8px" },
-        el("div", { style: "font-weight:600;font-size:13.5px" }, CodeBadge(it.codigo), it.nome),
-        Tag(it.status, "sm", it.niveis && it.niveis[it.status])));
-      if (it.valor) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, `Medição: ${it.valor} ${it.unidade}`));
-      if (it.obs) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, it.obs));
-      if (it.foto) c.appendChild(el("img", { src: it.foto, style: "margin-top:8px;width:110px;height:110px;object-fit:cover;border-radius:6px" }));
-      itemsList.appendChild(c);
-    });
-    printable.appendChild(itemsList);
+    if (!problemEntries.length) {
+      printable.appendChild(el("div", { class: "card", style: "padding:10px 12px;margin-bottom:10px;color:var(--ink-soft);font-size:13px" }, "Nenhum apontamento — todos os montantes conformes."));
+    } else {
+      const itemsList = el("div", { style: "display:flex;flex-direction:column;gap:8px;margin-bottom:10px" });
+      problemEntries.forEach(({ m, i }) => {
+        const c = Card({ style: "padding:10px 12px" });
+        c.appendChild(el("div", { style: "display:flex;justify-content:space-between;gap:8px" },
+          el("div", { style: "font-weight:600;font-size:13.5px" }, CodeBadge(i.codigo), i.nome),
+          Tag(i.status, "sm", i.niveis && i.niveis[i.status])));
+        c.appendChild(el("div", { class: "mono", style: "font-size:11px;color:var(--ink-faint);margin-top:3px" }, "Montante Nº " + m.numero));
+        if (i.valor) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, `Medição: ${i.valor} ${i.unidade}`));
+        if (i.obs) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, i.obs));
+        if (i.foto) c.appendChild(el("img", { src: i.foto, style: "margin-top:8px;width:110px;height:110px;object-fit:cover;border-radius:6px" }));
+        itemsList.appendChild(c);
+      });
+      printable.appendChild(itemsList);
+    }
 
+    const problemItems = problemEntries.map((x) => x.i);
     if (problemItems.length) {
       const agg = {};
       problemItems.forEach((i) => { const q = Number(i.qtd) > 0 ? Number(i.qtd) : 1; agg[i.peca] = (agg[i.peca] || 0) + q; });
@@ -739,23 +858,23 @@ function ReportScreen() {
   row1.appendChild(btnPdf); row1.appendChild(btnShare);
   actions.appendChild(row1);
 
-  const btnDelete = el("button", { class: "action-btn", style: "background:#fff;color:var(--red-dark);border:1px solid var(--red-bg)" }, el("span", { html: svg("trash", 15) }), " Excluir vistoria inteira");
-  btnDelete.addEventListener("click", async () => { if (confirm("Excluir esta vistoria e todas as estruturas dela?")) { await idbDelete("vistorias", v.id); await persistVistoriaList(); go("history"); } });
+  const btnDelete = el("button", { class: "action-btn", style: "background:#fff;color:var(--red-dark);border:1px solid var(--red-bg)" }, el("span", { html: svg("trash", 15) }), " Excluir inspeção inteira");
+  btnDelete.addEventListener("click", async () => { if (confirm("Excluir esta inspeção e todas as estruturas dela?")) { await idbDelete("vistorias", v.id); await persistVistoriaList(); go("history"); } });
   actions.appendChild(btnDelete);
 
   wrap.appendChild(actions);
   return wrap;
 }
 async function shareReport(v, st) {
-  let text = `Relatório de Vistoria — ${state.config.empresa}\nLoja/CD: ${v.lojaCd}${v.local ? " · " + v.local : ""}\nInspetor(es): ${v.inspetor}\nData: ${fmtDateOnly(v.data)}\nResultado geral: ${STATUS[st].label}\n`;
+  let text = `Relatório de Inspeção — ${state.config.empresa}\nLoja/CD: ${v.lojaCd}${v.local ? " · " + v.local : ""}\nInspetor(es): ${v.inspetor}\nData: ${fmtDateOnly(v.data)}\nResultado geral: ${STATUS[st].label}\n`;
   (v.estruturas || []).forEach((e) => {
-    const problemItems = e.itens.filter((i) => i.status !== "ok");
-    text += `\n— Estrutura ${e.codigo} [${STATUS[overallStatus(e.itens)].label}] —\n`;
-    text += problemItems.length ? problemItems.map((i) => `  - ${i.codigo ? "[" + i.codigo + "] " : ""}${i.nome} [${(i.niveis && i.niveis[i.status]) || STATUS[i.status].label}]${i.obs ? ": " + i.obs : ""}`).join("\n") : "  Nenhum apontamento — conforme.";
+    const problemEntries = (e.montantes || []).flatMap((m) => m.itens.filter((i) => i.status !== "ok").map((i) => ({ m, i })));
+    text += `\n— Estrutura ${e.codigo} [${STATUS[estruturaStatus(e)].label}] —\n`;
+    text += problemEntries.length ? problemEntries.map(({ m, i }) => `  - Montante ${m.numero}: ${i.codigo ? "[" + i.codigo + "] " : ""}${i.nome} [${(i.niveis && i.niveis[i.status]) || STATUS[i.status].label}]${i.obs ? ": " + i.obs : ""}`).join("\n") : "  Nenhum apontamento — conforme.";
     text += "\n";
   });
   if (navigator.share) {
-    try { await navigator.share({ title: `Vistoria ${v.lojaCd}`, text }); } catch (e) { /* cancelado */ }
+    try { await navigator.share({ title: `Inspeção ${v.lojaCd}`, text }); } catch (e) { /* cancelado */ }
   } else {
     await navigator.clipboard.writeText(text);
     alert("Resumo copiado para a área de transferência.");
@@ -766,15 +885,17 @@ async function shareReport(v, st) {
 function buildAnomaliaRows(v) {
   const rows = [];
   (v.estruturas || []).forEach((e) => {
-    e.itens.filter((i) => i.status !== "ok").forEach((i) => {
-      rows.push({
-        estruturaId: e.id, itemId: i.id,
-        setor: e.setor || "", tipoEstrutura: e.tipoEstrutura || "", numeroEstrutura: e.codigo || "",
-        lado: e.lado || "", montante: i.montante || "", corte: i.corte || "",
-        codigoAnomalia: i.codigo || "", nomeAnomalia: i.nome || "",
-        grau: (i.niveis && i.niveis[i.status]) || STATUS[i.status].label,
-        categoria: i.categoria || "", correcao: i.correcao || "", qtd: i.qtd == null ? 1 : i.qtd,
-        fabricante: e.fabricante || "",
+    (e.montantes || []).forEach((m) => {
+      m.itens.filter((i) => i.status !== "ok").forEach((i) => {
+        rows.push({
+          estruturaId: e.id, montanteId: m.id, itemId: i.id,
+          setor: e.setor || "", tipoEstrutura: e.tipoEstrutura || "", numeroEstrutura: e.codigo || "",
+          lado: e.lado || "", montante: m.numero, corte: i.corte || "",
+          codigoAnomalia: i.codigo || "", nomeAnomalia: i.nome || "",
+          grau: (i.niveis && i.niveis[i.status]) || STATUS[i.status].label,
+          categoria: i.categoria || "", correcao: i.correcao || "", qtd: i.qtd == null ? 1 : i.qtd,
+          fabricante: e.fabricante || "",
+        });
       });
     });
   });
@@ -795,12 +916,12 @@ function exportAnomaliasCsv(v) {
     header.join(";"),
     ...rows.map((r) => [r.setor, r.tipoEstrutura, r.numeroEstrutura, r.lado, r.montante, r.corte, r.codigoAnomalia, r.nomeAnomalia, r.grau, r.categoria, r.correcao, r.qtd, r.fabricante].map(csvEscape).join(";")),
   ];
-  download(`relatorio-anomalias-${(v.lojaCd || "vistoria").replace(/[^a-z0-9]+/gi, "-")}-${todayStr()}.csv`, "\uFEFF" + lines.join("\n"), "text/csv;charset=utf-8");
+  download(`relatorio-anomalias-${(v.lojaCd || "inspecao").replace(/[^a-z0-9]+/gi, "-")}-${todayStr()}.csv`, "\uFEFF" + lines.join("\n"), "text/csv;charset=utf-8");
 }
 function AnomaliasScreen() {
   const wrap = el("div", { class: "screen" });
   const v = state.vistorias.find((x) => x.id === state.activeVistoriaId);
-  if (!v) { wrap.appendChild(el("div", { class: "empty" }, "Vistoria não encontrada.")); return wrap; }
+  if (!v) { wrap.appendChild(el("div", { class: "empty" }, "Inspeção não encontrada.")); return wrap; }
 
   const headerCard = Card({ style: "margin-bottom:14px" });
   headerCard.appendChild(el("img", { src: "logo-full.png", alt: state.config.empresa, style: "height:22px;display:block;margin-bottom:4px" }));
@@ -816,7 +937,7 @@ function AnomaliasScreen() {
 
   const rows = buildAnomaliaRows(v);
   if (!rows.length) {
-    wrap.appendChild(el("div", { class: "card empty" }, "Nenhuma anomalia registrada nesta vistoria."));
+    wrap.appendChild(el("div", { class: "card empty" }, "Nenhuma anomalia registrada nesta inspeção."));
     return wrap;
   }
 
@@ -839,7 +960,8 @@ function AnomaliasScreen() {
         input.addEventListener("input", (e) => {
           r.correcao = e.target.value;
           const est = v.estruturas.find((x) => x.id === r.estruturaId);
-          const item = est && est.itens.find((x) => x.id === r.itemId);
+          const mont = est && (est.montantes || []).find((x) => x.id === r.montanteId);
+          const item = mont && mont.itens.find((x) => x.id === r.itemId);
           if (item) { item.correcao = e.target.value; clearTimeout(state.saveTimer); state.saveTimer = setTimeout(() => idbSet("vistorias", undefined, v), 400); }
         });
         td.appendChild(input);
@@ -863,13 +985,15 @@ function PartsScreen() {
   wrap.appendChild(el("p", { style: "font-size:13px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5" }, "Peças agregadas de todas as estruturas pendentes (não resolvidas), salvas neste aparelho."));
   const agg = {};
   state.vistorias.filter((v) => v.finalizada).forEach((v) => {
-    (v.estruturas || []).filter((e) => !e.resolvido && overallStatus(e.itens) !== "ok").forEach((e) => {
-      e.itens.filter((i) => i.status !== "ok").forEach((i) => {
-        const q = Number(i.qtd) > 0 ? Number(i.qtd) : 1;
-        if (!agg[i.peca]) agg[i.peca] = { qtd: 0, locais: new Set(), pior: "atencao" };
-        agg[i.peca].qtd += q;
-        agg[i.peca].locais.add(`${e.codigo} (${v.lojaCd})`);
-        if (i.status === "critico") agg[i.peca].pior = "critico";
+    (v.estruturas || []).filter((e) => !e.resolvido && estruturaStatus(e) !== "ok").forEach((e) => {
+      (e.montantes || []).forEach((m) => {
+        m.itens.filter((i) => i.status !== "ok").forEach((i) => {
+          const q = Number(i.qtd) > 0 ? Number(i.qtd) : 1;
+          if (!agg[i.peca]) agg[i.peca] = { qtd: 0, locais: new Set(), pior: "atencao" };
+          agg[i.peca].qtd += q;
+          agg[i.peca].locais.add(`${e.codigo} (${v.lojaCd})`);
+          if (i.status === "critico") agg[i.peca].pior = "critico";
+        });
       });
     });
   });
@@ -1039,7 +1163,7 @@ function ConfigScreen() {
   const exportBtn = el("button", { class: "ghost-btn", style: "flex:1;padding:10px" }, "Exportar backup (.json)");
   exportBtn.addEventListener("click", async () => {
     const all = { config: state.config, vistorias: await idbGetAll("vistorias"), orderedParts: state.orderedParts, exportadoEm: new Date().toISOString() };
-    download(`backup-vistorias-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(all, null, 2), "application/json");
+    download(`backup-inspecoes-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(all, null, 2), "application/json");
   });
   const importInput = el("input", { type: "file", accept: "application/json", style: "display:none" });
   const importBtn = el("button", { class: "ghost-btn", style: "flex:1;padding:10px" }, "Importar backup");
@@ -1052,7 +1176,7 @@ function ConfigScreen() {
       const data = JSON.parse(text);
       if (Array.isArray(data.vistorias)) { for (const v of data.vistorias) await idbSet("vistorias", undefined, v); }
       await persistVistoriaList();
-      alert(`Importado: ${(data.vistorias || []).length} vistoria(s).`);
+      alert(`Importado: ${(data.vistorias || []).length} inspeção(ões).`);
       render();
     } catch (err) { alert("Arquivo inválido."); }
   });
