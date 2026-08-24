@@ -123,6 +123,9 @@ input, select, textarea { font-family: inherit; }
 .offline-banner.show { display: block; }
 .save-indicator { font-size: 11px; color: var(--ink-faint); display: flex; align-items: center; gap: 5px; }
 
+table th, table td { border-bottom: 1px solid var(--line); }
+table thead th { border-bottom: none; }
+
 svg { display: block; }
 
 @media print {

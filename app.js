@@ -33,43 +33,45 @@ function svg(name, size = 16, extra = "") {
 
 /* ---------------- Config padrão / taxonomia 9.x ---------------- */
 const DEFAULT_ITEMS = [
-  { id: "prumo", codigo: "9.17", nome: "Prumo da estrutura", desc: "Desaprumo longitudinal ou transversal fora da tolerância normativa", peca: "Serviço de realinhamento (prumo)", niveis: { ok: "Na tolerância do prumo", atencao: "Fora de prumo", critico: "Fora de prumo grave" } },
-  { id: "col", codigo: "9.16", nome: "Colunas", desc: "Amassados, flambagem, corte ou trincas na coluna vertical", peca: "Coluna vertical" },
-  { id: "colunaBase", codigo: "9.15", nome: "Coluna solta da placa de base", desc: "Coluna sem solda ou fixação adequada à placa de base", peca: "Solda/fixação da coluna" },
-  { id: "juncao", codigo: "9.19", nome: "Junção de coluna", desc: "Emenda de coluna com folga, desalinhada ou danificada", peca: "Kit de junção de coluna" },
-  { id: "desalinh", codigo: "9.20", nome: "Desalinhamento das colunas", desc: "Colunas de um mesmo montante fora do alinhamento entre si", peca: "Serviço de realinhamento" },
-  { id: "placaBase", codigo: "9.13 · 9.14 · 9.39", nome: "Placa de base", desc: "Danificada, ausente ou adaptada fora do padrão do fabricante", peca: "Placa de base" },
-  { id: "chumbador", codigo: "9.12", nome: "Chumbadores / fixação ao piso", desc: "Falta ou falha na fixação da placa de base ao piso", peca: "Chumbador" },
-  { id: "calco", codigo: "9.38", nome: "Calços de nivelação", desc: "Ausentes ou insuficientes sob a placa de base", peca: "Calço de nivelação" },
-  { id: "configuracao", codigo: "9.1", nome: "Configuração do montante", desc: "Configuração de níveis divergente do projeto original", peca: "Revisão de projeto / configuração" },
-  { id: "longarina", codigo: "9.2 · 9.3 · 9.4 · 9.5 · 9.7", nome: "Longarinas (vigas)", desc: "Empenamento, flexão, encaixe solto, tipo divergente ou mal posicionada", peca: "Longarina" },
-  { id: "travessa", codigo: "9.8 · 9.9 · 9.10 · 9.11", nome: "Travessas", desc: "Solta, faltante, danificada ou mal posicionada", peca: "Travessa" },
-  { id: "diagonal", codigo: "9.8 · 9.9 · 9.10 · 9.11", nome: "Diagonais de contraventamento", desc: "Solta, faltante, danificada ou mal posicionada", peca: "Diagonal de contraventamento" },
-  { id: "contravFundo", codigo: "9.44", nome: "Contraventamento de fundo / horizontal", desc: "Ausente ou danificado", peca: "Contraventamento" },
-  { id: "transversina", codigo: "9.46", nome: "Transversina / reforço", desc: "Ausente ou danificada", peca: "Transversina / reforço" },
-  { id: "adaptacoes", codigo: "9.6 · 9.18", nome: "Adaptações na estrutura", desc: "Furações, componentes soldados ou adaptações fora de projeto", peca: "Avaliação técnica de engenharia" },
-  { id: "protetor", codigo: "9.21", nome: "Protetor de coluna", desc: "Ausente, danificado ou com parafusos de fixação faltando", peca: "Protetor de coluna" },
-  { id: "distMontante", codigo: "9.22 · 9.23 · 9.24 · 9.25", nome: "Distanciador de montante", desc: "Ausente ou danificado entre colunas duplas", peca: "Distanciador de montante" },
-  { id: "distParede", codigo: "9.26 · 9.27 · 9.28", nome: "Distanciador de parede", desc: "Ausente ou danificado", peca: "Distanciador de parede" },
-  { id: "stopper", codigo: "9.43", nome: "Stopper / batente de paletes", desc: "Ausente ou danificado", peca: "Stopper" },
-  { id: "suporteCentral", codigo: "9.41", nome: "Suporte rack central", desc: "Ausente, danificado ou desalinhado", peca: "Suporte rack central" },
-  { id: "amarracao", codigo: "9.32", nome: "Amarrações superiores", desc: "Ausentes ou soltas entre estruturas", peca: "Amarração superior / tirante" },
-  { id: "gondola", codigo: "9.29 · 9.30 · 9.31", nome: "Gôndolas", desc: "Danos estruturais na gôndola de acabamento", peca: "Reparo de gôndola" },
-  { id: "colunaGondola", codigo: "9.42", nome: "Coluna da gôndola", desc: "Identificação ausente ou dano na coluna da gôndola", peca: "Coluna de gôndola" },
-  { id: "planoMetalico", codigo: "9.40", nome: "Plano metálico ou de madeira", desc: "Ausente, quebrado ou fora de especificação", peca: "Plano metálico / de madeira" },
-  { id: "piso", codigo: "9.37", nome: "Piso do corredor", desc: "Trincas, buracos ou desnível que comprometam a operação", peca: "Reparo de piso" },
-  { id: "corrosao", codigo: "9.36", nome: "Corrosão", desc: "Corrosão em coluna, longarina, travessa, diagonal ou plano metálico", peca: "Tratamento anticorrosivo / substituição" },
-  { id: "desplacamento", codigo: "9.35", nome: "Desplacamento de pintura", desc: "Pintura solta expondo o metal — indício de impacto ou corrosão", peca: "Retoque de pintura anticorrosiva" },
-  { id: "placaCarga", codigo: "", nome: "Placa de capacidade de carga", desc: "Ausente, ilegível ou capacidade divergente do projeto", peca: "Placa de identificação de carga" },
-  { id: "luminaria", codigo: "9.34", nome: "Luminárias", desc: "Queimada, ausente ou insuficiente sobre o corredor", peca: "Luminária" },
-  { id: "iluminacao", codigo: "9.45", nome: "Nível de iluminação do corredor", desc: "Medição de iluminância — mínimo recomendado 50 lux", peca: "Reforço de iluminação", tipo: "medicao", unidade: "lux", min: 50 },
-  { id: "unidadeCarga", codigo: "9.33", nome: "Unidades de carga / paletização", desc: "Paletes danificados, mal posicionados ou fora do padrão", peca: "Orientação de paletização" },
-  { id: "vao", codigo: "", nome: "Sinalização e vão livre", desc: "Corredor obstruído ou sinalização de circulação apagada", peca: "Sinalização de piso" },
+  { id: "prumo", codigo: "9.17", categoria: "Estruturais", nome: "Prumo da estrutura", desc: "Desaprumo longitudinal ou transversal fora da tolerância normativa", peca: "Serviço de realinhamento (prumo)", niveis: { ok: "Na tolerância do prumo", atencao: "Fora de prumo", critico: "Fora de prumo grave" } },
+  { id: "col", codigo: "9.16", categoria: "Estruturais", nome: "Colunas", desc: "Amassados, flambagem, corte ou trincas na coluna vertical", peca: "Coluna vertical" },
+  { id: "colunaBase", codigo: "9.15", categoria: "Estruturais", nome: "Coluna solta da placa de base", desc: "Coluna sem solda ou fixação adequada à placa de base", peca: "Solda/fixação da coluna" },
+  { id: "juncao", codigo: "9.19", categoria: "Estruturais", nome: "Junção de coluna", desc: "Emenda de coluna com folga, desalinhada ou danificada", peca: "Kit de junção de coluna" },
+  { id: "desalinh", codigo: "9.20", categoria: "Estruturais", nome: "Desalinhamento das colunas", desc: "Colunas de um mesmo montante fora do alinhamento entre si", peca: "Serviço de realinhamento" },
+  { id: "placaBase", codigo: "9.13 · 9.14 · 9.39", categoria: "Estruturais", nome: "Placa de base", desc: "Danificada, ausente ou adaptada fora do padrão do fabricante", peca: "Placa de base" },
+  { id: "chumbador", codigo: "9.12", categoria: "Estruturais", nome: "Chumbadores / fixação ao piso", desc: "Falta ou falha na fixação da placa de base ao piso", peca: "Chumbador" },
+  { id: "calco", codigo: "9.38", categoria: "Estruturais", nome: "Calços de nivelação", desc: "Ausentes ou insuficientes sob a placa de base", peca: "Calço de nivelação" },
+  { id: "configuracao", codigo: "9.1", categoria: "Gerais", nome: "Configuração do montante", desc: "Configuração de níveis divergente do projeto original", peca: "Revisão de projeto / configuração" },
+  { id: "longarina", codigo: "9.2 · 9.3 · 9.4 · 9.5 · 9.7", categoria: "Estruturais", nome: "Longarinas (vigas)", desc: "Empenamento, flexão, encaixe solto, tipo divergente ou mal posicionada", peca: "Longarina" },
+  { id: "travessa", codigo: "9.8 · 9.9 · 9.10 · 9.11", categoria: "Estruturais", nome: "Travessas", desc: "Solta, faltante, danificada ou mal posicionada", peca: "Travessa" },
+  { id: "diagonal", codigo: "9.8 · 9.9 · 9.10 · 9.11", categoria: "Estruturais", nome: "Diagonais de contraventamento", desc: "Solta, faltante, danificada ou mal posicionada", peca: "Diagonal de contraventamento" },
+  { id: "contravFundo", codigo: "9.44", categoria: "Estruturais", nome: "Contraventamento de fundo / horizontal", desc: "Ausente ou danificado", peca: "Contraventamento" },
+  { id: "transversina", codigo: "9.46", categoria: "Estruturais", nome: "Transversina / reforço", desc: "Ausente ou danificada", peca: "Transversina / reforço" },
+  { id: "adaptacoes", codigo: "9.6 · 9.18", categoria: "Gerais", nome: "Adaptações na estrutura", desc: "Furações, componentes soldados ou adaptações fora de projeto", peca: "Avaliação técnica de engenharia" },
+  { id: "protetor", codigo: "9.21", categoria: "Segurança", nome: "Protetor de coluna", desc: "Ausente, danificado ou com parafusos de fixação faltando", peca: "Protetor de coluna" },
+  { id: "distMontante", codigo: "9.22 · 9.23 · 9.24 · 9.25", categoria: "Estruturais", nome: "Distanciador de montante", desc: "Ausente ou danificado entre colunas duplas", peca: "Distanciador de montante" },
+  { id: "distParede", codigo: "9.26 · 9.27 · 9.28", categoria: "Estruturais", nome: "Distanciador de parede", desc: "Ausente ou danificado", peca: "Distanciador de parede" },
+  { id: "stopper", codigo: "9.43", categoria: "Segurança", nome: "Stopper / batente de paletes", desc: "Ausente ou danificado", peca: "Stopper" },
+  { id: "suporteCentral", codigo: "9.41", categoria: "Estruturais", nome: "Suporte rack central", desc: "Ausente, danificado ou desalinhado", peca: "Suporte rack central" },
+  { id: "amarracao", codigo: "9.32", categoria: "Estruturais", nome: "Amarrações superiores", desc: "Ausentes ou soltas entre estruturas", peca: "Amarração superior / tirante" },
+  { id: "gondola", codigo: "9.29 · 9.30 · 9.31", categoria: "Gerais", nome: "Gôndolas", desc: "Danos estruturais na gôndola de acabamento", peca: "Reparo de gôndola" },
+  { id: "colunaGondola", codigo: "9.42", categoria: "Gerais", nome: "Coluna da gôndola", desc: "Identificação ausente ou dano na coluna da gôndola", peca: "Coluna de gôndola" },
+  { id: "planoMetalico", codigo: "9.40", categoria: "Gerais", nome: "Plano metálico ou de madeira", desc: "Ausente, quebrado ou fora de especificação", peca: "Plano metálico / de madeira" },
+  { id: "piso", codigo: "9.37", categoria: "Gerais", nome: "Piso do corredor", desc: "Trincas, buracos ou desnível que comprometam a operação", peca: "Reparo de piso" },
+  { id: "corrosao", codigo: "9.36", categoria: "Gerais", nome: "Corrosão", desc: "Corrosão em coluna, longarina, travessa, diagonal ou plano metálico", peca: "Tratamento anticorrosivo / substituição" },
+  { id: "desplacamento", codigo: "9.35", categoria: "Gerais", nome: "Desplacamento de pintura", desc: "Pintura solta expondo o metal — indício de impacto ou corrosão", peca: "Retoque de pintura anticorrosiva" },
+  { id: "placaCarga", codigo: "", categoria: "Segurança", nome: "Placa de capacidade de carga", desc: "Ausente, ilegível ou capacidade divergente do projeto", peca: "Placa de identificação de carga" },
+  { id: "luminaria", codigo: "9.34", categoria: "Iluminação", nome: "Luminárias", desc: "Queimada, ausente ou insuficiente sobre o corredor", peca: "Luminária" },
+  { id: "iluminacao", codigo: "9.45", categoria: "Iluminação", nome: "Nível de iluminação do corredor", desc: "Medição de iluminância — mínimo recomendado 50 lux", peca: "Reforço de iluminação", tipo: "medicao", unidade: "lux", min: 50 },
+  { id: "unidadeCarga", codigo: "9.33", categoria: "Gerais", nome: "Unidades de carga / paletização", desc: "Paletes danificados, mal posicionados ou fora do padrão", peca: "Orientação de paletização" },
+  { id: "vao", codigo: "", categoria: "Segurança", nome: "Sinalização e vão livre", desc: "Corredor obstruído ou sinalização de circulação apagada", peca: "Sinalização de piso" },
 ];
 const DEFAULT_CONFIG = {
   empresa: "Minha Empresa",
   locais: ["Centro de Distribuição 001", "Loja Centro", "Loja Shopping"],
   fabricantes: ["ESMENA 75X78", "ESMENA TÚNEL 100X105", "PROVENÇA", "OUTROS"],
+  setores: ["SALÃO DE VENDAS", "DEPÓSITO", "CÂMARAS FRIGORÍFICAS", "OUTROS"],
+  tiposEstrutura: ["SIMPLES ENTRADA", "DUPLA ENTRADA"],
   itens: DEFAULT_ITEMS,
 };
 const STATUS = {
@@ -88,6 +90,11 @@ function fmtDateOnly(isoDate) {
   if (!isoDate) return "";
   const [y, m, d] = isoDate.split("-");
   return d && m && y ? `${d}/${m}/${y}` : isoDate;
+}
+function fmtDateShort(isoDate) {
+  if (!isoDate) return "";
+  const [y, m, d] = isoDate.split("-");
+  return d && m && y ? `${d}/${m}/${y.slice(2)}` : isoDate;
 }
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function overallStatus(itens) {
@@ -244,6 +251,7 @@ function render() {
     home: "Início", vistoria: "Vistoria", estrutura: (estAtual && estAtual.codigo) || "Nova estrutura",
     history: "Histórico", parts: "Lista de peças", config: "Configurações",
     report: (state.vistorias.find((v) => v.id === state.activeVistoriaId) || {}).lojaCd || "Relatório",
+    anomalias: "Relatório de Anomalias",
   };
   const backTargets = {
     vistoria: () => go("home"),
@@ -252,6 +260,7 @@ function render() {
     parts: () => go("home"),
     config: () => go("home"),
     report: () => go("history"),
+    anomalias: () => go("report", state.activeVistoriaId),
   };
   app.appendChild(TopBar(titles[state.screen], state.screen !== "home" ? backTargets[state.screen] : null));
 
@@ -263,13 +272,14 @@ function render() {
   if (state.screen === "parts") body.appendChild(PartsScreen());
   if (state.screen === "config") body.appendChild(ConfigScreen());
   if (state.screen === "report") body.appendChild(ReportScreen());
+  if (state.screen === "anomalias") body.appendChild(AnomaliasScreen());
   app.appendChild(body);
   app.appendChild(BottomNav());
 }
 
 function TopBar(title, onBack) {
   const bar = el("div", { class: "topbar no-print" });
-  bar.appendChild(onBack ? el("button", { onclick: onBack, html: svg("back", 22) }) : el("div", { style: "width:22px" }));
+  bar.appendChild(onBack ? el("button", { onclick: onBack, html: svg("back", 22) }) : el("img", { src: "icon-192.png", style: "width:22px;height:22px;border-radius:5px" }));
   bar.appendChild(el("h1", {}, title));
   return bar;
 }
@@ -320,7 +330,7 @@ function HomeScreen() {
   const rascunhos = state.vistorias.filter((v) => !v.finalizada);
 
   wrap.appendChild(el("div", { style: "margin-bottom:18px" },
-    el("div", { class: "mono", style: "font-size:12px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:1px" }, state.config.empresa),
+    el("img", { src: "logo-full.png", alt: state.config.empresa, style: "height:34px;display:block;margin-bottom:8px" }),
     el("h2", { style: "font-size:26px;margin-top:2px" }, "Inspeção de Porta-Pallets")));
 
   wrap.appendChild(el("button", { class: "cta", onclick: () => go("vistoria") },
@@ -368,10 +378,14 @@ function VistoriaRow(v, isDraft) {
 
 /* ---------------- Vistoria (Loja/CD + lista de Estruturas) ---------------- */
 function newVistoriaSkeleton() {
-  return { id: uid(), lojaCd: (state.config.locais || [])[0] || "", local: "", data: todayStr(), inspetor: "", createdAt: new Date().toISOString(), finalizada: false, estruturas: [] };
+  return { id: uid(), lojaCd: (state.config.locais || [])[0] || "", local: "", data: todayStr(), inspetor: "", versao: "V.0", createdAt: new Date().toISOString(), finalizada: false, estruturas: [] };
 }
 function newEstruturaSkeleton() {
-  return { id: uid(), codigo: "", rua: "", lado: "", modulos: "", fabricante: (state.config.fabricantes || [])[0] || "", resolvido: false, itens: state.config.itens.map((it) => ({ ...it, status: "ok", obs: "", foto: null, valor: "" })) };
+  return {
+    id: uid(), codigo: "", setor: (state.config.setores || [])[0] || "", tipoEstrutura: (state.config.tiposEstrutura || [])[0] || "",
+    rua: "", lado: "", modulos: "", fabricante: (state.config.fabricantes || [])[0] || "", resolvido: false,
+    itens: state.config.itens.map((it) => ({ ...it, status: "ok", obs: "", foto: null, valor: "", montante: "", corte: "", qtd: 1, correcao: "" })),
+  };
 }
 async function ensureVistoria(id) {
   if (id) {
@@ -428,6 +442,7 @@ function VistoriaScreen() {
   header.appendChild(el("div", { class: "row2" },
     Field("Data", inputEl(v.data, (val) => { v.data = val; saveVistoriaDebounced(); }, "", "date")),
     Field("Inspetor(es)", inputEl(v.inspetor, (val) => { v.inspetor = val; saveVistoriaDebounced(); }, "Nome(s)"))));
+  header.appendChild(Field("Versão do relatório", inputEl(v.versao || "V.0", (val) => { v.versao = val; saveVistoriaDebounced(); }, "Ex: V.0")));
   header.appendChild(el("div", { id: "save-indicator", class: "save-indicator" }, "✓ Salvo no aparelho"));
   inner.appendChild(header);
 
@@ -501,6 +516,9 @@ function EstruturaScreen() {
   const header = Card({ style: "margin-bottom:14px" });
   header.appendChild(Field("Código da estrutura", inputEl(e.codigo, (val) => { e.codigo = val; saveVistoriaDebounced(); }, "Ex: 03/04 (PRUMO E LUX)")));
   header.appendChild(el("div", { class: "row2" },
+    Field("Setor", selectEl(state.config.setores || [], e.setor, (val) => { e.setor = val; saveVistoriaDebounced(); })),
+    Field("Tipo de estrutura", selectEl(state.config.tiposEstrutura || [], e.tipoEstrutura, (val) => { e.tipoEstrutura = val; saveVistoriaDebounced(); }))));
+  header.appendChild(el("div", { class: "row2" },
     Field("Rua", inputEl(e.rua, (val) => { e.rua = val; saveVistoriaDebounced(); }, "Ex: 03")),
     Field("Lado", inputEl(e.lado, (val) => { e.lado = val; saveVistoriaDebounced(); }, "Ex: ímpar"))));
   header.appendChild(el("div", { class: "row2" },
@@ -569,6 +587,12 @@ function ChecklistItemCard(item) {
   }
 
   if (item.status !== "ok") {
+    const gridRow = el("div", { class: "row2", style: "margin-top:10px" },
+      Field("Montante(s) afetado(s)", inputEl(item.montante || "", (val) => { item.montante = val; saveVistoriaDebounced(); }, "Ex: 1, 3")),
+      Field("Corte / nível", inputEl(item.corte || "", (val) => { item.corte = val; saveVistoriaDebounced(); }, "Ex: CHÃO + 3")));
+    card.appendChild(gridRow);
+    card.appendChild(Field("Quantidade", inputEl(item.qtd == null ? 1 : item.qtd, (val) => { item.qtd = val; saveVistoriaDebounced(); }, "1", "number")));
+
     const obsBox = el("textarea", { class: "input", rows: 2, placeholder: "Observação (opcional)", style: "margin-top:10px;resize:vertical" });
     obsBox.value = item.obs || "";
     obsBox.addEventListener("input", (e) => { item.obs = e.target.value; saveVistoriaDebounced(); });
@@ -655,7 +679,7 @@ function ReportScreen() {
 
   const printable = el("div", { class: "screen printable" });
   const banner = el("div", { class: "card", style: `border:2px solid var(--${st === "ok" ? "green" : st === "atencao" ? "amber" : "red"});background:var(--${st === "ok" ? "green" : st === "atencao" ? "amber" : "red"}-bg);margin-bottom:16px` });
-  banner.appendChild(el("div", { class: "mono", style: "font-size:11px;color:var(--ink-faint);text-transform:uppercase" }, state.config.empresa));
+  banner.appendChild(el("img", { src: "logo-full.png", alt: state.config.empresa, style: "height:22px;display:block;margin-bottom:4px" }));
   banner.appendChild(el("div", { style: "font-family:'Oswald',sans-serif;font-size:22px;font-weight:700;margin-top:2px" }, v.lojaCd));
   banner.appendChild(el("div", { style: "font-size:13px;color:var(--ink-soft);margin-top:2px" }, [v.local, (v.estruturas || []).length + " estrutura(s)"].filter(Boolean).join(" · ")));
   const infoRow = el("div", { style: "display:flex;justify-content:space-between;align-items:center;margin-top:12px" },
@@ -687,7 +711,7 @@ function ReportScreen() {
 
     if (problemItems.length) {
       const agg = {};
-      problemItems.forEach((i) => { agg[i.peca] = (agg[i.peca] || 0) + 1; });
+      problemItems.forEach((i) => { const q = Number(i.qtd) > 0 ? Number(i.qtd) : 1; agg[i.peca] = (agg[i.peca] || 0) + q; });
       const partsCard = Card({ style: "padding:4px;margin-bottom:8px" });
       Object.entries(agg).forEach(([peca, qtd], idx, arr) => {
         partsCard.appendChild(el("div", { style: "display:flex;justify-content:space-between;padding:8px 10px" + (idx < arr.length - 1 ? ";border-bottom:1px solid var(--line)" : "") },
@@ -704,6 +728,9 @@ function ReportScreen() {
   wrap.appendChild(printable);
 
   const actions = el("div", { class: "no-print", style: "padding:0 16px 20px;display:flex;flex-direction:column;gap:8px" });
+  const btnAnomalias = el("button", { class: "action-btn", style: "background:var(--amber-bg);color:var(--amber-dark);border:1px solid var(--line)" }, el("span", { html: svg("wrench", 15) }), " Relatório de Anomalias (tabela / CSV)");
+  btnAnomalias.addEventListener("click", () => go("anomalias", v.id));
+  actions.appendChild(btnAnomalias);
   const row1 = el("div", { class: "row" });
   const btnPdf = el("button", { class: "action-btn", style: "background:var(--ink);color:#fff" }, el("span", { html: svg("download", 16) }), " Baixar / PDF");
   btnPdf.addEventListener("click", () => window.print());
@@ -735,6 +762,101 @@ async function shareReport(v, st) {
   }
 }
 
+/* ---------------- Relatório de Anomalias (tabela / CSV) ---------------- */
+function buildAnomaliaRows(v) {
+  const rows = [];
+  (v.estruturas || []).forEach((e) => {
+    e.itens.filter((i) => i.status !== "ok").forEach((i) => {
+      rows.push({
+        estruturaId: e.id, itemId: i.id,
+        setor: e.setor || "", tipoEstrutura: e.tipoEstrutura || "", numeroEstrutura: e.codigo || "",
+        lado: e.lado || "", montante: i.montante || "", corte: i.corte || "",
+        codigoAnomalia: i.codigo || "", nomeAnomalia: i.nome || "",
+        grau: (i.niveis && i.niveis[i.status]) || STATUS[i.status].label,
+        categoria: i.categoria || "", correcao: i.correcao || "", qtd: i.qtd == null ? 1 : i.qtd,
+        fabricante: e.fabricante || "",
+      });
+    });
+  });
+  return rows;
+}
+function csvEscape(val) {
+  const s = String(val === null || val === undefined ? "" : val);
+  return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function exportAnomaliasCsv(v) {
+  const rows = buildAnomaliaRows(v);
+  const header = ["SETOR", "TIPO ESTRUTURA", "Nº ESTRUTURA", "LADO/POSIÇÃO", "MONTANTE", "CORTE", "ANOMALIA (CÓD.)", "ANOMALIA (DESCRIÇÃO)", "GRAU", "CATEGORIA", "CORREÇÃO", "QTD.", "FABRICANTE"];
+  const lines = [
+    "RELATÓRIO DE ANOMALIAS",
+    `${v.lojaCd}${v.local ? ", " + v.local : ""}`,
+    `${fmtDateShort(v.data)} - ${v.versao || "V.0"}`,
+    "",
+    header.join(";"),
+    ...rows.map((r) => [r.setor, r.tipoEstrutura, r.numeroEstrutura, r.lado, r.montante, r.corte, r.codigoAnomalia, r.nomeAnomalia, r.grau, r.categoria, r.correcao, r.qtd, r.fabricante].map(csvEscape).join(";")),
+  ];
+  download(`relatorio-anomalias-${(v.lojaCd || "vistoria").replace(/[^a-z0-9]+/gi, "-")}-${todayStr()}.csv`, "\uFEFF" + lines.join("\n"), "text/csv;charset=utf-8");
+}
+function AnomaliasScreen() {
+  const wrap = el("div", { class: "screen" });
+  const v = state.vistorias.find((x) => x.id === state.activeVistoriaId);
+  if (!v) { wrap.appendChild(el("div", { class: "empty" }, "Vistoria não encontrada.")); return wrap; }
+
+  const headerCard = Card({ style: "margin-bottom:14px" });
+  headerCard.appendChild(el("img", { src: "logo-full.png", alt: state.config.empresa, style: "height:22px;display:block;margin-bottom:4px" }));
+  headerCard.appendChild(el("div", { style: "font-family:'Oswald',sans-serif;font-size:18px;font-weight:700;margin-top:2px" }, "RELATÓRIO DE ANOMALIAS"));
+  headerCard.appendChild(el("div", { style: "font-size:13px;color:var(--ink-soft);margin-top:2px" }, v.lojaCd + (v.local ? ", " + v.local : "")));
+  headerCard.appendChild(el("div", { class: "mono", style: "font-size:11.5px;color:var(--ink-faint);margin-top:2px" }, `${fmtDateShort(v.data)} - ${v.versao || "V.0"}`));
+  wrap.appendChild(headerCard);
+
+  const exportBtn = el("button", { class: "ghost-btn no-print", style: "width:100%;padding:12px;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px" },
+    el("span", { html: svg("download", 16) }), "Exportar CSV (abre no Excel)");
+  exportBtn.addEventListener("click", () => exportAnomaliasCsv(v));
+  wrap.appendChild(exportBtn);
+
+  const rows = buildAnomaliaRows(v);
+  if (!rows.length) {
+    wrap.appendChild(el("div", { class: "card empty" }, "Nenhuma anomalia registrada nesta vistoria."));
+    return wrap;
+  }
+
+  const cols = [
+    ["Setor", "setor"], ["Tipo estrutura", "tipoEstrutura"], ["Nº estrutura", "numeroEstrutura"], ["Lado", "lado"],
+    ["Montante", "montante"], ["Corte", "corte"], ["Cód.", "codigoAnomalia"], ["Anomalia", "nomeAnomalia"],
+    ["Grau", "grau"], ["Categoria", "categoria"], ["Correção", "correcao"], ["Qtd.", "qtd"], ["Fabricante", "fabricante"],
+  ];
+  const scrollWrap = el("div", { style: "overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:10px;background:#fff" });
+  const table = el("table", { style: "border-collapse:collapse;font-size:12.5px;white-space:nowrap" });
+  const thead = el("thead", {}, el("tr", {}, ...cols.map(([label]) => el("th", { style: "text-align:left;padding:8px 10px;background:var(--steel);color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.3px;position:sticky;top:0" }, label))));
+  table.appendChild(thead);
+  const tbody = el("tbody", {});
+  rows.forEach((r, idx) => {
+    const tr = el("tr", { style: idx % 2 ? "background:var(--bg)" : "" });
+    cols.forEach(([label, key]) => {
+      if (key === "correcao") {
+        const td = el("td", { style: "padding:4px 6px" });
+        const input = el("input", { class: "input", style: "min-width:160px;padding:6px 8px;font-size:12.5px", value: r.correcao, placeholder: "Ex: Elaborar, Substituir..." });
+        input.addEventListener("input", (e) => {
+          r.correcao = e.target.value;
+          const est = v.estruturas.find((x) => x.id === r.estruturaId);
+          const item = est && est.itens.find((x) => x.id === r.itemId);
+          if (item) { item.correcao = e.target.value; clearTimeout(state.saveTimer); state.saveTimer = setTimeout(() => idbSet("vistorias", undefined, v), 400); }
+        });
+        td.appendChild(input);
+        tr.appendChild(td);
+      } else {
+        tr.appendChild(el("td", { style: "padding:8px 10px;color:var(--ink)" }, String(r[key] ?? "")));
+      }
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  scrollWrap.appendChild(table);
+  wrap.appendChild(scrollWrap);
+  wrap.appendChild(el("p", { style: "font-size:11.5px;color:var(--ink-faint);margin-top:10px" }, "Arraste a tabela para o lado para ver todas as colunas. A coluna Correção é editada aqui e salva automaticamente."));
+  return wrap;
+}
+
 /* ---------------- Peças ---------------- */
 function PartsScreen() {
   const wrap = el("div", { class: "screen" });
@@ -743,8 +865,9 @@ function PartsScreen() {
   state.vistorias.filter((v) => v.finalizada).forEach((v) => {
     (v.estruturas || []).filter((e) => !e.resolvido && overallStatus(e.itens) !== "ok").forEach((e) => {
       e.itens.filter((i) => i.status !== "ok").forEach((i) => {
+        const q = Number(i.qtd) > 0 ? Number(i.qtd) : 1;
         if (!agg[i.peca]) agg[i.peca] = { qtd: 0, locais: new Set(), pior: "atencao" };
-        agg[i.peca].qtd += 1;
+        agg[i.peca].qtd += q;
         agg[i.peca].locais.add(`${e.codigo} (${v.lojaCd})`);
         if (i.status === "critico") agg[i.peca].pior = "critico";
       });
@@ -780,6 +903,8 @@ function ConfigScreen() {
   const local = JSON.parse(JSON.stringify(state.config));
   if (!local.locais) local.locais = [];
   if (!local.fabricantes) local.fabricantes = [];
+  if (!local.setores) local.setores = [];
+  if (!local.tiposEstrutura) local.tiposEstrutura = [];
 
   const empresaCard = Card({ style: "margin-bottom:14px" });
   empresaCard.appendChild(Field("Nome da empresa", inputEl(local.empresa, (v) => { local.empresa = v; })));
@@ -829,6 +954,50 @@ function ConfigScreen() {
   fabCard.appendChild(novoFabRow);
   wrap.appendChild(fabCard);
 
+  const setoresCard = Card({ style: "margin-bottom:14px" });
+  setoresCard.appendChild(el("div", { style: "font-size:11.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:8px" }, "Setores da loja/CD"));
+  const setoresList = el("div", {});
+  function renderSetores() {
+    setoresList.innerHTML = "";
+    (local.setores || []).forEach((s, idx) => {
+      const row = el("div", { style: "display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)" },
+        el("span", { style: "font-size:13.5px" }, s), el("button", { style: "background:none;border:none;color:var(--ink-faint)", html: svg("x", 15) }));
+      row.lastChild.addEventListener("click", () => { local.setores.splice(idx, 1); renderSetores(); });
+      setoresList.appendChild(row);
+    });
+  }
+  renderSetores();
+  setoresCard.appendChild(setoresList);
+  const novoSetorRow = el("div", { class: "row", style: "margin-top:10px" });
+  const novoSetorInput = el("input", { class: "input", placeholder: "Ex: FARMÁCIA" });
+  const novoSetorBtn = el("button", { class: "ghost-btn", html: svg("plus", 15) });
+  novoSetorBtn.addEventListener("click", () => { if (novoSetorInput.value.trim()) { local.setores = local.setores || []; local.setores.push(novoSetorInput.value.trim().toUpperCase()); novoSetorInput.value = ""; renderSetores(); } });
+  novoSetorRow.appendChild(novoSetorInput); novoSetorRow.appendChild(novoSetorBtn);
+  setoresCard.appendChild(novoSetorRow);
+  wrap.appendChild(setoresCard);
+
+  const tiposCard = Card({ style: "margin-bottom:14px" });
+  tiposCard.appendChild(el("div", { style: "font-size:11.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:8px" }, "Tipos de estrutura"));
+  const tiposList = el("div", {});
+  function renderTipos() {
+    tiposList.innerHTML = "";
+    (local.tiposEstrutura || []).forEach((s, idx) => {
+      const row = el("div", { style: "display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)" },
+        el("span", { style: "font-size:13.5px" }, s), el("button", { style: "background:none;border:none;color:var(--ink-faint)", html: svg("x", 15) }));
+      row.lastChild.addEventListener("click", () => { local.tiposEstrutura.splice(idx, 1); renderTipos(); });
+      tiposList.appendChild(row);
+    });
+  }
+  renderTipos();
+  tiposCard.appendChild(tiposList);
+  const novoTipoRow = el("div", { class: "row", style: "margin-top:10px" });
+  const novoTipoInput = el("input", { class: "input", placeholder: "Ex: TRIPLA ENTRADA" });
+  const novoTipoBtn = el("button", { class: "ghost-btn", html: svg("plus", 15) });
+  novoTipoBtn.addEventListener("click", () => { if (novoTipoInput.value.trim()) { local.tiposEstrutura = local.tiposEstrutura || []; local.tiposEstrutura.push(novoTipoInput.value.trim().toUpperCase()); novoTipoInput.value = ""; renderTipos(); } });
+  novoTipoRow.appendChild(novoTipoInput); novoTipoRow.appendChild(novoTipoBtn);
+  tiposCard.appendChild(novoTipoRow);
+  wrap.appendChild(tiposCard);
+
   const itensCard = Card({ style: "margin-bottom:14px" });
   itensCard.appendChild(el("div", { style: "font-size:11.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:8px" }, "Itens do checklist"));
   const itensList = el("div", {});
@@ -837,7 +1006,7 @@ function ConfigScreen() {
     local.itens.forEach((it, idx) => {
       const row = el("div", { style: "padding:8px 0;border-bottom:1px solid var(--line)" },
         el("div", { style: "display:flex;justify-content:space-between;gap:8px" },
-          el("div", {}, el("div", { style: "font-size:13.5px;font-weight:600" }, CodeBadge(it.codigo), it.nome), el("div", { style: "font-size:11.5px;color:var(--ink-faint)" }, "Peça: " + it.peca)),
+          el("div", {}, el("div", { style: "font-size:13.5px;font-weight:600" }, CodeBadge(it.codigo), it.nome), el("div", { style: "font-size:11.5px;color:var(--ink-faint)" }, "Peça: " + it.peca + (it.categoria ? " · Categoria: " + it.categoria : ""))),
           el("button", { style: "background:none;border:none;color:var(--ink-faint)", html: svg("trash", 15) })));
       row.querySelector("button").addEventListener("click", () => { local.itens.splice(idx, 1); renderItens(); });
       itensList.appendChild(row);
@@ -848,18 +1017,19 @@ function ConfigScreen() {
   const codigoInput = el("input", { class: "input", placeholder: "Código interno (ex: 9.47) — opcional" });
   const nomeInput = el("input", { class: "input", placeholder: "Nome do item (ex: Guarda-corpo)" });
   const descInput = el("input", { class: "input", placeholder: "Descrição do que verificar" });
+  const categoriaInput = el("input", { class: "input", placeholder: "Categoria (ex: Estruturais, Segurança, Gerais, Iluminação)" });
   const pecaInput = el("input", { class: "input" });
   const addRow = el("div", { class: "row" });
   const addBtn = el("button", { class: "ghost-btn", html: svg("plus", 15) });
   addBtn.addEventListener("click", () => {
     if (nomeInput.value.trim() && pecaInput.value.trim()) {
-      local.itens.push({ id: uid(), codigo: codigoInput.value.trim(), nome: nomeInput.value.trim(), desc: descInput.value.trim(), peca: pecaInput.value.trim() });
-      codigoInput.value = ""; nomeInput.value = ""; descInput.value = ""; pecaInput.value = "";
+      local.itens.push({ id: uid(), codigo: codigoInput.value.trim(), nome: nomeInput.value.trim(), desc: descInput.value.trim(), categoria: categoriaInput.value.trim(), peca: pecaInput.value.trim() });
+      codigoInput.value = ""; nomeInput.value = ""; descInput.value = ""; categoriaInput.value = ""; pecaInput.value = "";
       renderItens();
     }
   });
   addRow.appendChild(pecaInput); addRow.appendChild(addBtn);
-  itensCard.appendChild(el("div", { style: "margin-top:10px;display:flex;flex-direction:column;gap:6px" }, codigoInput, nomeInput, descInput, addRow));
+  itensCard.appendChild(el("div", { style: "margin-top:10px;display:flex;flex-direction:column;gap:6px" }, codigoInput, nomeInput, descInput, categoriaInput, addRow));
   wrap.appendChild(itensCard);
 
   const backupCard = Card({ style: "margin-bottom:14px" });
