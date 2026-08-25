@@ -82,7 +82,7 @@ const DEFAULT_ITEMS = [
   { id: "guiaEntrada", codigo: "9.49", categoria: "Estruturais", nome: "Guia de entrada dos paletes faltante, danificada ou com falha", descOpcoes: ["DANIFICADOS", "FALTANTES", "COM FALHAS NA FIXAÇÃO"], peca: "Guia de entrada dos paletes faltante, danificada ou com falha" },
   { id: "trilho", codigo: "9.50", categoria: "Estruturais", nome: "Trilho de entrada e/ou trilho menor de saída faltante, danificado ou com falha", descOpcoes: ["TRILHO DE ENTRADA DANIFICADO", "TRILHO DE ENTRADA FALTANTE", "TRILHO DE ENTRADA COM FALHAS NA FIXAÇÃO", "TRILHO MENOR DE SAÍDA DANIFICADO", "TRILHO MENOR DE SAÍDA FALTANTE", "TRILHO MENOR DE SAÍDA COM FALHAS NA FIXAÇÃO"], peca: "Trilho de entrada e/ou trilho menor de saída faltante, danificado ou com falha" },
 ];
-const APP_VERSION = "1.22";
+const APP_VERSION = "1.27";
 const CATALOG_VERSION = 2;
 const DEFAULT_CONFIG = {
   empresa: "Minha Empresa",
@@ -764,7 +764,7 @@ function MontanteScreen() {
   const quickRow = el("div", { class: "row", style: "margin-bottom:14px" });
   const btnTudoConforme = el("button", { class: "ghost-btn", style: "flex:1;padding:10px" }, "✓ Marcar tudo conforme");
   btnTudoConforme.addEventListener("click", async () => {
-    m.itens.forEach((it) => { it.status = "ok"; it.obs = ""; it.descTxt = ""; it.tipoTxt = ""; it.localTxt = ""; it.grauTxt = ""; it.foto = null; });
+    m.itens.forEach((it) => { it.status = "ok"; it.obs = ""; it.descTxt = ""; it.tipoTxt = ""; it.localTxt = ""; it.grauTxt = ""; it.foto = null; it.uiCollapsed = false; });
     await saveVistoriaNow();
     render();
   });
@@ -815,9 +815,29 @@ function MontanteScreen() {
 
 function ChecklistItemCard(item) {
   const card = Card({ class: "item-card" });
+
+  const collapsedAnomalia = item.tipo !== "medicao" && isProblem(item.status) && item.uiCollapsed;
+  const collapsedConforme = item.tipo !== "medicao" && item.status === "ok";
+
   card.appendChild(el("div", { style: "display:flex;justify-content:space-between;align-items:flex-start;gap:8px" },
     el("div", { class: "item-name" }, CodeBadge(item.codigo), item.nome),
     Tag(item.status, "sm")));
+
+  if (collapsedConforme) {
+    const alterBtn = el("button", { class: "ghost-btn", style: "margin-top:6px;padding:6px 12px;font-size:11.5px" }, "Alterar");
+    alterBtn.addEventListener("click", () => { item.status = "pendente"; saveVistoriaDebounced(); render(); });
+    card.appendChild(alterBtn);
+    return card;
+  }
+
+  if (collapsedAnomalia) {
+    const resumoPartes = [item.descTxt, item.tipoTxt, item.localTxt, item.grauTxt].filter(Boolean);
+    card.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:4px" }, resumoPartes.length ? resumoPartes.join(" · ") : "Com anomalia registrada"));
+    const editBtn = el("button", { class: "ghost-btn", style: "margin-top:8px;padding:7px 14px" }, "✎ Editar");
+    editBtn.addEventListener("click", () => { item.uiCollapsed = false; render(); });
+    card.appendChild(editBtn);
+    return card;
+  }
 
   if (item.tipo === "medicao") {
     const row = el("div", { style: "display:flex;align-items:center;gap:8px" });
@@ -833,9 +853,9 @@ function ChecklistItemCard(item) {
   } else {
     const conformeRow = el("div", { class: "status-row" });
     const btnOk = el("button", { class: "status-btn" + (item.status === "ok" ? " active-ok" : ""), title: "Conforme" }, el("span", { html: svg("check", 15) }), "CONFORME");
-    btnOk.addEventListener("click", () => { item.status = "ok"; item.obs = ""; item.descTxt = ""; item.tipoTxt = ""; item.localTxt = ""; item.grauTxt = ""; saveVistoriaDebounced(); render(); });
+    btnOk.addEventListener("click", () => { item.status = "ok"; item.obs = ""; item.descTxt = ""; item.tipoTxt = ""; item.localTxt = ""; item.grauTxt = ""; item.uiCollapsed = false; saveVistoriaDebounced(); render(); });
     const btnAnomalia = el("button", { class: "status-btn" + (isProblem(item.status) ? " active-problema" : ""), title: "Com anomalia" }, el("span", { html: svg("alert", 15) }), "COM ANOMALIA");
-    btnAnomalia.addEventListener("click", () => { item.status = "problema"; saveVistoriaDebounced(); render(); });
+    btnAnomalia.addEventListener("click", () => { item.status = "problema"; item.uiCollapsed = false; saveVistoriaDebounced(); render(); });
     conformeRow.appendChild(btnOk); conformeRow.appendChild(btnAnomalia);
     card.appendChild(conformeRow);
 
@@ -856,6 +876,10 @@ function ChecklistItemCard(item) {
       const photoWrap = el("div", { style: "margin-top:8px" });
       renderPhotoArea(photoWrap, item);
       card.appendChild(photoWrap);
+
+      const okBtn = el("button", { class: "submit-btn", style: "width:100%;margin-top:12px;padding:11px" }, "✓ OK, confirmar e recolher");
+      okBtn.addEventListener("click", () => { item.uiCollapsed = true; saveVistoriaNow(); render(); });
+      card.appendChild(okBtn);
     }
   }
   return card;
@@ -1129,6 +1153,19 @@ function ReportScreen() {
   banner.appendChild(infoRow);
   printable.appendChild(banner);
 
+  const topActions = el("div", { class: "no-print", style: "display:flex;flex-direction:column;gap:8px;margin-bottom:18px" });
+  const btnAnomalias = el("button", { class: "action-btn", style: "background:var(--amber-bg);color:var(--amber-dark);border:1px solid var(--line)" }, el("span", { html: svg("wrench", 15) }), " Relatório de Anomalias (tabela / CSV)");
+  btnAnomalias.addEventListener("click", () => go("anomalias", v.id));
+  topActions.appendChild(btnAnomalias);
+  const row1 = el("div", { class: "row" });
+  const btnPdf = el("button", { class: "action-btn", style: "background:var(--ink);color:#fff" }, el("span", { html: svg("download", 16) }), " Baixar / PDF");
+  btnPdf.addEventListener("click", () => window.print());
+  const btnShare = el("button", { class: "action-btn", style: "background:#fff;color:var(--ink);border:1px solid var(--line)" }, el("span", { html: svg("share", 16) }), " Compartilhar");
+  btnShare.addEventListener("click", () => shareReport(v, st));
+  row1.appendChild(btnPdf); row1.appendChild(btnShare);
+  topActions.appendChild(row1);
+  printable.appendChild(topActions);
+
   (v.estruturas || []).forEach((e) => {
     const est = estruturaStatus(e);
     const allItens = estruturaItensFlat(e);
@@ -1176,17 +1213,6 @@ function ReportScreen() {
   wrap.appendChild(printable);
 
   const actions = el("div", { class: "no-print", style: "padding:0 16px 20px;display:flex;flex-direction:column;gap:8px" });
-  const btnAnomalias = el("button", { class: "action-btn", style: "background:var(--amber-bg);color:var(--amber-dark);border:1px solid var(--line)" }, el("span", { html: svg("wrench", 15) }), " Relatório de Anomalias (tabela / CSV)");
-  btnAnomalias.addEventListener("click", () => go("anomalias", v.id));
-  actions.appendChild(btnAnomalias);
-  const row1 = el("div", { class: "row" });
-  const btnPdf = el("button", { class: "action-btn", style: "background:var(--ink);color:#fff" }, el("span", { html: svg("download", 16) }), " Baixar / PDF");
-  btnPdf.addEventListener("click", () => window.print());
-  const btnShare = el("button", { class: "action-btn", style: "background:#fff;color:var(--ink);border:1px solid var(--line)" }, el("span", { html: svg("share", 16) }), " Compartilhar");
-  btnShare.addEventListener("click", () => shareReport(v, st));
-  row1.appendChild(btnPdf); row1.appendChild(btnShare);
-  actions.appendChild(row1);
-
   const btnDelete = el("button", { class: "action-btn", style: "background:#fff;color:var(--red-dark);border:1px solid var(--red-bg)" }, el("span", { html: svg("trash", 15) }), " Excluir inspeção inteira");
   btnDelete.addEventListener("click", async () => { if (confirm("Excluir esta inspeção e todas as estruturas dela?")) { await idbDelete("vistorias", v.id); await persistVistoriaList(); go("history"); } });
   actions.appendChild(btnDelete);
@@ -1358,22 +1384,59 @@ function PartsInspectionScreen() {
     return wrap;
   }
 
-  const exportBtn = el("button", { class: "ghost-btn", style: "width:100%;padding:12px;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px" },
-    el("span", { html: svg("download", 16) }), "Exportar CSV");
-  exportBtn.addEventListener("click", () => download(`lista-pecas-${slug(v.lojaCd)}.csv`, buildPartsCsvContent(v, rows), "text/csv;charset=utf-8"));
-  wrap.appendChild(exportBtn);
+  let view = "detalhado";
+  const tabRow = el("div", { class: "chip-row" });
+  const contentBox = el("div", {});
+  const tabs = [["detalhado", "Detalhado"], ["resumo", "Resumo"]];
 
-  const list = el("div", { style: "display:flex;flex-direction:column;gap:8px" });
-  rows.forEach((r) => {
-    const card = Card({ style: "padding:12px" });
-    card.appendChild(el("div", { style: "display:flex;justify-content:space-between;gap:8px" },
-      el("div", {}, el("div", { style: "font-weight:700;font-size:14px" }, r.peca), el("div", { style: "font-size:11.5px;color:var(--ink-faint);margin-top:2px" }, [...r.refs].join(" · "))),
-      el("div", { style: "display:flex;flex-direction:column;align-items:flex-end;gap:4px" },
-        el("span", { class: "mono", style: "font-size:13px;font-weight:700" }, "x" + r.qtd),
-        r.graus.size ? el("span", { style: "font-size:11px;color:var(--amber-dark);font-weight:600" }, [...r.graus].join(" · ")) : null)));
-    list.appendChild(card);
-  });
-  wrap.appendChild(list);
+  function renderContent() {
+    contentBox.innerHTML = "";
+
+    const exportBtn = el("button", { class: "ghost-btn", style: "width:100%;padding:12px;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px" },
+      el("span", { html: svg("download", 16) }), "Exportar CSV");
+    contentBox.appendChild(exportBtn);
+
+    const list = el("div", { style: "display:flex;flex-direction:column;gap:8px" });
+    if (view === "detalhado") {
+      exportBtn.addEventListener("click", () => download(`lista-pecas-${slug(v.lojaCd)}.csv`, buildPartsCsvContent(v, rows), "text/csv;charset=utf-8"));
+      rows.forEach((r) => {
+        const card = Card({ style: "padding:12px" });
+        card.appendChild(el("div", { style: "display:flex;justify-content:space-between;gap:8px" },
+          el("div", {}, el("div", { style: "font-weight:700;font-size:14px" }, r.peca), el("div", { style: "font-size:11.5px;color:var(--ink-faint);margin-top:2px" }, [...r.refs].join(" · "))),
+          el("div", { style: "display:flex;flex-direction:column;align-items:flex-end;gap:4px" },
+            el("span", { class: "mono", style: "font-size:13px;font-weight:700" }, "x" + r.qtd),
+            r.graus.size ? el("span", { style: "font-size:11px;color:var(--amber-dark);font-weight:600" }, [...r.graus].join(" · ")) : null)));
+        list.appendChild(card);
+      });
+    } else {
+      const resumoRows = rows.slice().sort((a, b) => b.qtd - a.qtd);
+      exportBtn.addEventListener("click", () => {
+        const lines = ["RESUMO DE PEÇAS", `${v.lojaCd}${v.local ? ", " + v.local : ""}`, "", ["PEÇA", "QUANTIDADE"].join(";"), ...resumoRows.map((r) => [r.peca, r.qtd].map(csvEscape).join(";"))];
+        download(`resumo-pecas-${slug(v.lojaCd)}.csv`, "\uFEFF" + lines.join("\n"), "text/csv;charset=utf-8");
+      });
+      resumoRows.forEach((r) => {
+        const card = Card({ style: "padding:12px" });
+        card.appendChild(el("div", { style: "display:flex;justify-content:space-between;align-items:center;gap:8px" },
+          el("div", { style: "font-weight:700;font-size:14px" }, r.peca),
+          el("span", { class: "mono", style: "font-size:14px;font-weight:700" }, "x" + r.qtd)));
+        list.appendChild(card);
+      });
+    }
+    contentBox.appendChild(list);
+  }
+
+  function renderTabs() {
+    tabRow.innerHTML = "";
+    tabs.forEach(([key, label]) => {
+      const chip = el("button", { class: "chip" + (view === key ? " active" : "") }, label);
+      chip.addEventListener("click", () => { view = key; renderTabs(); renderContent(); });
+      tabRow.appendChild(chip);
+    });
+  }
+  renderTabs();
+  renderContent();
+  wrap.appendChild(tabRow);
+  wrap.appendChild(contentBox);
   return wrap;
 }
 
