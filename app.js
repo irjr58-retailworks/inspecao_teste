@@ -82,7 +82,7 @@ const DEFAULT_ITEMS = [
   { id: "guiaEntrada", codigo: "9.49", categoria: "Estruturais", nome: "Guia de entrada dos paletes faltante, danificada ou com falha", descOpcoes: ["DANIFICADOS", "FALTANTES", "COM FALHAS NA FIXAÇÃO"], peca: "Guia de entrada dos paletes faltante, danificada ou com falha" },
   { id: "trilho", codigo: "9.50", categoria: "Estruturais", nome: "Trilho de entrada e/ou trilho menor de saída faltante, danificado ou com falha", descOpcoes: ["TRILHO DE ENTRADA DANIFICADO", "TRILHO DE ENTRADA FALTANTE", "TRILHO DE ENTRADA COM FALHAS NA FIXAÇÃO", "TRILHO MENOR DE SAÍDA DANIFICADO", "TRILHO MENOR DE SAÍDA FALTANTE", "TRILHO MENOR DE SAÍDA COM FALHAS NA FIXAÇÃO"], peca: "Trilho de entrada e/ou trilho menor de saída faltante, danificado ou com falha" },
 ];
-const APP_VERSION = "1.27";
+const APP_VERSION = "1.28";
 const CATALOG_VERSION = 2;
 const DEFAULT_CONFIG = {
   empresa: "Minha Empresa",
@@ -813,6 +813,22 @@ function MontanteScreen() {
   return wrap;
 }
 
+function statusSelect(item) {
+  const sel = el("select", { class: "status-select status-select-" + item.status });
+  [["pendente", "Pendente"], ["ok", "Conforme"], ["problema", "Com anomalia"]].forEach(([val, label]) => {
+    sel.appendChild(el("option", { value: val }, label));
+  });
+  sel.value = item.status;
+  sel.addEventListener("change", (e) => {
+    const val = e.target.value;
+    if (val === "ok") { item.status = "ok"; item.obs = ""; item.descTxt = ""; item.tipoTxt = ""; item.localTxt = ""; item.grauTxt = ""; item.uiCollapsed = false; }
+    else if (val === "problema") { item.status = "problema"; item.uiCollapsed = false; }
+    else { item.status = "pendente"; }
+    saveVistoriaDebounced();
+    render();
+  });
+  return sel;
+}
 function ChecklistItemCard(item) {
   const card = Card({ class: "item-card" });
 
@@ -821,12 +837,9 @@ function ChecklistItemCard(item) {
 
   card.appendChild(el("div", { style: "display:flex;justify-content:space-between;align-items:flex-start;gap:8px" },
     el("div", { class: "item-name" }, CodeBadge(item.codigo), item.nome),
-    Tag(item.status, "sm")));
+    item.tipo === "medicao" ? Tag(item.status, "sm") : statusSelect(item)));
 
   if (collapsedConforme) {
-    const alterBtn = el("button", { class: "ghost-btn", style: "margin-top:6px;padding:6px 12px;font-size:11.5px" }, "Alterar");
-    alterBtn.addEventListener("click", () => { item.status = "pendente"; saveVistoriaDebounced(); render(); });
-    card.appendChild(alterBtn);
     return card;
   }
 
@@ -851,14 +864,6 @@ function ChecklistItemCard(item) {
     row.appendChild(input);
     card.appendChild(row);
   } else {
-    const conformeRow = el("div", { class: "status-row" });
-    const btnOk = el("button", { class: "status-btn" + (item.status === "ok" ? " active-ok" : ""), title: "Conforme" }, el("span", { html: svg("check", 15) }), "CONFORME");
-    btnOk.addEventListener("click", () => { item.status = "ok"; item.obs = ""; item.descTxt = ""; item.tipoTxt = ""; item.localTxt = ""; item.grauTxt = ""; item.uiCollapsed = false; saveVistoriaDebounced(); render(); });
-    const btnAnomalia = el("button", { class: "status-btn" + (isProblem(item.status) ? " active-problema" : ""), title: "Com anomalia" }, el("span", { html: svg("alert", 15) }), "COM ANOMALIA");
-    btnAnomalia.addEventListener("click", () => { item.status = "problema"; item.uiCollapsed = false; saveVistoriaDebounced(); render(); });
-    conformeRow.appendChild(btnOk); conformeRow.appendChild(btnAnomalia);
-    card.appendChild(conformeRow);
-
     if (isProblem(item.status)) {
       if (item.descOpcoes) card.appendChild(Field("Descrição", suggestInput(item.descTxt, (val) => { item.descTxt = val; saveVistoriaDebounced(); }, "Digite a descrição da anomalia", item.descOpcoes)));
       if (item.tipoOpcoes) card.appendChild(Field("Tipo", suggestInput(item.tipoTxt, (val) => { item.tipoTxt = val; saveVistoriaDebounced(); }, "Digite o tipo/componente", item.tipoOpcoes)));

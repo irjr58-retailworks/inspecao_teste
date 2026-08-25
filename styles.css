@@ -107,7 +107,16 @@ input, select, textarea { font-family: inherit; }
 .item-card { padding: 10px 12px; margin-bottom: 8px; }
 .item-name { font-weight: 700; font-size: 14px; }
 .item-desc { font-size: 12px; color: var(--ink-faint); margin: 2px 0 10px; line-height: 1.4; }
-.status-row { display: flex; gap: 6px; margin-top: 8px; }
+.status-select {
+  border: 1px solid; border-radius: 4px; padding: 3px 20px 3px 8px; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.2px; font-family: 'IBM Plex Mono', monospace;
+  flex-shrink: 0; -webkit-appearance: none; appearance: none;
+  background-repeat: no-repeat; background-position: right 5px center; background-size: 9px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235B6470' stroke-width='3'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+.status-select-pendente { background-color: var(--gray-bg); color: var(--gray-dark); border-color: var(--gray); }
+.status-select-ok { background-color: var(--green-bg); color: var(--green-dark); border-color: var(--green); }
+.status-select-problema { background-color: var(--amber-bg); color: var(--amber-dark); border-color: var(--amber); }
 .status-btn {
   flex: 1; padding: 7px 6px; border-radius: 7px; border: 1.5px solid var(--line); background: #fff;
   color: var(--ink-faint); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.2px;
