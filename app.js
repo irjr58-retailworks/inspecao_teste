@@ -82,6 +82,7 @@ const DEFAULT_ITEMS = [
   { id: "guiaEntrada", codigo: "9.49", categoria: "Estruturais", nome: "Guia de entrada dos paletes faltante, danificada ou com falha", descOpcoes: ["DANIFICADOS", "FALTANTES", "COM FALHAS NA FIXAÇÃO"], peca: "Guia de entrada dos paletes faltante, danificada ou com falha" },
   { id: "trilho", codigo: "9.50", categoria: "Estruturais", nome: "Trilho de entrada e/ou trilho menor de saída faltante, danificado ou com falha", descOpcoes: ["TRILHO DE ENTRADA DANIFICADO", "TRILHO DE ENTRADA FALTANTE", "TRILHO DE ENTRADA COM FALHAS NA FIXAÇÃO", "TRILHO MENOR DE SAÍDA DANIFICADO", "TRILHO MENOR DE SAÍDA FALTANTE", "TRILHO MENOR DE SAÍDA COM FALHAS NA FIXAÇÃO"], peca: "Trilho de entrada e/ou trilho menor de saída faltante, danificado ou com falha" },
 ];
+const APP_VERSION = "1.22";
 const CATALOG_VERSION = 2;
 const DEFAULT_CONFIG = {
   empresa: "Minha Empresa",
@@ -285,7 +286,7 @@ function render() {
   const titles = {
     home: "Início", vistoria: "Inspeção", estrutura: (estAtual && estAtual.codigo) || "Nova estrutura",
     montante: montAtual ? "Montante Nº " + montAtual.numero : "Montante",
-    history: "Histórico", parts: "Lista de peças", config: "Configurações",
+    history: "Histórico", config: "Configurações",
     hub: (state.vistorias.find((v) => v.id === state.activeVistoriaId) || {}).lojaCd || "Inspeção",
     report: (state.vistorias.find((v) => v.id === state.activeVistoriaId) || {}).lojaCd || "Relatório",
     partsInspection: "Lista de peças",
@@ -296,7 +297,6 @@ function render() {
     estrutura: () => go("vistoria", state.draftVistoria.id),
     montante: () => go("estrutura", state.draftVistoria.id, state.activeEstruturaId),
     history: () => go("home"),
-    parts: () => go("home"),
     config: () => go("home"),
     hub: () => go("history"),
     report: () => go("hub", state.activeVistoriaId),
@@ -311,7 +311,6 @@ function render() {
   if (state.screen === "estrutura") body.appendChild(EstruturaScreen());
   if (state.screen === "montante") body.appendChild(MontanteScreen());
   if (state.screen === "history") body.appendChild(HistoryScreen());
-  if (state.screen === "parts") body.appendChild(PartsScreen());
   if (state.screen === "config") body.appendChild(ConfigScreen());
   if (state.screen === "hub") body.appendChild(InspectionHubScreen());
   if (state.screen === "report") body.appendChild(ReportScreen());
@@ -330,7 +329,7 @@ function TopBar(title, onBack) {
 function BottomNav() {
   const items = [
     ["home", "Início", "home"], ["vistoria", "Inspeção", "plusCircle"], ["history", "Histórico", "clock"],
-    ["parts", "Peças", "package"], ["config", "Ajustes", "settings"],
+    ["config", "Ajustes", "settings"],
   ];
   const nav = el("div", { class: "bottomnav no-print" });
   items.forEach(([id, label, icon]) => {
@@ -416,6 +415,7 @@ function HomeScreen() {
     recentes.forEach((v) => list.appendChild(VistoriaRow(v, false)));
     wrap.appendChild(list);
   }
+  wrap.appendChild(el("div", { class: "mono", style: "text-align:center;color:var(--ink-faint);font-size:10.5px;margin-top:20px" }, `v${APP_VERSION}`));
   return wrap;
 }
 function VistoriaRow(v, isDraft) {
@@ -448,7 +448,7 @@ function VistoriaRow(v, isDraft) {
 
 /* ---------------- Inspeção (Loja/CD + lista de Estruturas) ---------------- */
 function newVistoriaSkeleton() {
-  return { id: uid(), lojaCd: (state.config.locais || [])[0] || "", local: "", data: todayStr(), inspetor: "", versao: "V.0", createdAt: new Date().toISOString(), finalizada: false, estruturas: [] };
+  return { id: uid(), lojaCd: "", local: "", data: todayStr(), inspetor: "", createdAt: new Date().toISOString(), finalizada: false, estruturas: [] };
 }
 function newEstruturaSkeleton() {
   return {
@@ -519,7 +519,6 @@ function VistoriaScreen() {
   header.appendChild(el("div", { class: "row2" },
     Field("Data", inputEl(v.data, (val) => { v.data = val; saveVistoriaDebounced(); }, "", "date")),
     Field("Inspetor(es)", inputEl(v.inspetor, (val) => { v.inspetor = val; saveVistoriaDebounced(); }, "Nome(s)"))));
-  header.appendChild(Field("Versão do relatório", inputEl(v.versao || "V.0", (val) => { v.versao = val; saveVistoriaDebounced(); }, "Ex: V.0")));
   header.appendChild(el("div", { id: "save-indicator", class: "save-indicator" }, "✓ Salvo no aparelho"));
   inner.appendChild(header);
 
@@ -654,9 +653,11 @@ function EstruturaScreen() {
   header.appendChild(el("div", { id: "save-indicator", class: "save-indicator" }, "✓ Salvo no aparelho"));
   inner.appendChild(header);
 
-  const montHead = el("div", { style: "display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px" },
+  const montHead = el("div", { style: "display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px" },
     el("h3", { class: "section-title", style: "margin:0" }, `Montantes (${(e.montantes || []).length})`));
   inner.appendChild(montHead);
+
+  const totalM = (e.montantes || []).length;
 
   const target = parseInt(e.modulos, 10) || 0;
   if (target > (e.montantes || []).length) {
@@ -668,11 +669,58 @@ function EstruturaScreen() {
     inner.appendChild(syncBar);
   }
 
-  const montList = el("div", { style: "display:flex;flex-direction:column;gap:8px;margin-bottom:14px" });
-  (e.montantes || []).forEach((m) => montList.appendChild(MontanteRow(m, e, v)));
-  inner.appendChild(montList);
+  if (totalM) {
+    const jumpRow = el("div", { class: "row", style: "margin-bottom:10px" });
+    const jumpInput = el("input", { class: "input", type: "number", placeholder: "Ir para o Nº..." });
+    const jumpBtn = el("button", { class: "ghost-btn" }, "Ir");
+    const doJump = () => {
+      const n = parseInt(jumpInput.value, 10);
+      const alvo = (e.montantes || []).find((m) => m.numero === n);
+      if (alvo) go("montante", v.id, e.id, alvo.id);
+      else alert("Montante Nº " + n + " não encontrado nesta estrutura.");
+    };
+    jumpBtn.addEventListener("click", doJump);
+    jumpInput.addEventListener("keydown", (ev) => { if (ev.key === "Enter") doJump(); });
+    jumpRow.appendChild(jumpInput); jumpRow.appendChild(jumpBtn);
+    inner.appendChild(jumpRow);
 
-  if (!(e.montantes || []).length) {
+    let filtro = "todos";
+    let visivel = 100;
+    const filterRow = el("div", { class: "chip-row" });
+    const montList = el("div", { style: "display:flex;flex-direction:column;gap:8px" });
+    const loadMoreWrap = el("div", { style: "margin-top:10px" });
+    const filtros = [["todos", "Todos"], ["pendente", "Pendentes"], ["problema", "Com anomalia"], ["ok", "Conforme"]];
+
+    function passaFiltro(m) {
+      if (filtro === "todos") return true;
+      if (filtro === "pendente") return m.itens.some((i) => i.status === "pendente");
+      if (filtro === "problema") return m.itens.some((i) => isProblem(i.status));
+      if (filtro === "ok") return m.itens.every((i) => i.status === "ok");
+      return true;
+    }
+    function refreshList() {
+      filterRow.innerHTML = "";
+      filtros.forEach(([key, label]) => {
+        const chip = el("button", { class: "chip" + (filtro === key ? " active" : "") }, label);
+        chip.addEventListener("click", () => { filtro = key; visivel = 100; refreshList(); });
+        filterRow.appendChild(chip);
+      });
+      const filtrados = (e.montantes || []).filter(passaFiltro);
+      montList.innerHTML = "";
+      filtrados.slice(0, visivel).forEach((m) => montList.appendChild(MontanteRow(m, e, v)));
+      loadMoreWrap.innerHTML = "";
+      if (filtrados.length > visivel) {
+        const moreBtn = el("button", { class: "ghost-btn", style: "width:100%;padding:12px" }, `Carregar mais (${Math.min(visivel, filtrados.length)} de ${filtrados.length})`);
+        moreBtn.addEventListener("click", () => { visivel += 100; refreshList(); });
+        loadMoreWrap.appendChild(moreBtn);
+      }
+      if (!filtrados.length) montList.appendChild(el("div", { class: "card empty" }, "Nenhum montante nesse filtro."));
+    }
+    refreshList();
+    inner.appendChild(filterRow);
+    inner.appendChild(montList);
+    inner.appendChild(loadMoreWrap);
+  } else {
     inner.appendChild(el("div", { class: "card empty" }, "Informe a Qtd. módulos acima para gerar os montantes automaticamente."));
   }
 
@@ -713,6 +761,25 @@ function MontanteScreen() {
   inner.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-faint);margin-bottom:10px" }, `Estrutura ${e.codigo || "—"} · Montante Nº ${m.numero}`));
   inner.appendChild(el("div", { id: "save-indicator", class: "save-indicator", style: "margin-bottom:10px" }, "✓ Salvo no aparelho"));
 
+  const quickRow = el("div", { class: "row", style: "margin-bottom:14px" });
+  const btnTudoConforme = el("button", { class: "ghost-btn", style: "flex:1;padding:10px" }, "✓ Marcar tudo conforme");
+  btnTudoConforme.addEventListener("click", async () => {
+    m.itens.forEach((it) => { it.status = "ok"; it.obs = ""; it.descTxt = ""; it.tipoTxt = ""; it.localTxt = ""; it.grauTxt = ""; it.foto = null; });
+    await saveVistoriaNow();
+    render();
+  });
+  const btnReplicar = el("button", { class: "ghost-btn", style: "flex:1;padding:10px" }, "⧉ Replicar p/ pendentes");
+  btnReplicar.addEventListener("click", async () => {
+    const alvos = (e.montantes || []).filter((x) => x.id !== m.id && x.itens.every((i) => i.status === "pendente"));
+    if (!alvos.length) { alert("Não há montantes pendentes (ainda não tocados) nesta estrutura para replicar."); return; }
+    if (!confirm(`Isso vai copiar o resultado do Montante Nº ${m.numero} para ${alvos.length} montante(s) ainda pendente(s) nesta estrutura (fotos não são copiadas). Continuar?`)) return;
+    alvos.forEach((x) => { x.itens = m.itens.map((it) => ({ ...JSON.parse(JSON.stringify(it)), foto: null })); });
+    await saveVistoriaNow();
+    go("estrutura", v.id, e.id);
+  });
+  quickRow.appendChild(btnTudoConforme); quickRow.appendChild(btnReplicar);
+  inner.appendChild(quickRow);
+
   const pending = m.itens.filter((i) => isProblem(i.status)).length;
   const headRow = el("div", { style: "display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px" },
     el("h3", { class: "section-title", style: "margin:0" }, `Checklist (${m.itens.length} itens)`));
@@ -722,6 +789,22 @@ function MontanteScreen() {
   const list = el("div", {});
   m.itens.forEach((it) => list.appendChild(ChecklistItemCard(it)));
   inner.appendChild(list);
+
+  const ordenados = (e.montantes || []).slice().sort((a, b) => a.numero - b.numero);
+  const idx = ordenados.findIndex((x) => x.id === m.id);
+  const prevM = ordenados[idx - 1];
+  const nextM = ordenados[idx + 1];
+  const navRow = el("div", { class: "row no-print", style: "margin-top:14px" });
+  const btnPrev = el("button", { class: "ghost-btn", style: "flex:1;padding:12px" }, "◀ Anterior");
+  btnPrev.disabled = !prevM;
+  if (!prevM) btnPrev.style.opacity = "0.4";
+  btnPrev.addEventListener("click", async () => { clearTimeout(state.saveTimer); await saveVistoriaNow(); if (prevM) go("montante", v.id, e.id, prevM.id); });
+  const btnNext = el("button", { class: "ghost-btn", style: "flex:1;padding:12px" }, "Próximo ▶");
+  btnNext.disabled = !nextM;
+  if (!nextM) btnNext.style.opacity = "0.4";
+  btnNext.addEventListener("click", async () => { clearTimeout(state.saveTimer); await saveVistoriaNow(); if (nextM) go("montante", v.id, e.id, nextM.id); });
+  navRow.appendChild(btnPrev); navRow.appendChild(btnNext);
+  inner.appendChild(navRow);
 
   const submitWrap = el("div", { class: "sticky-submit no-print" },
     el("button", { class: "submit-btn" }, "Voltar para a estrutura"));
@@ -915,7 +998,7 @@ async function buildInspectionPdf(v) {
   } catch (e) { /* segue sem logo se não conseguir carregar */ }
 
   text(v.lojaCd || "Inspeção", 18, { bold: true, gap: 2 });
-  text([v.local, (v.estruturas || []).length + " estrutura(s)", "Inspetor(es): " + (v.inspetor || "—"), fmtDateOnly(v.data), v.versao || ""].filter(Boolean).join("  ·  "), 10, { color: "#5B6470", gap: 16 });
+  text([v.local, (v.estruturas || []).length + " estrutura(s)", "Inspetor(es): " + (v.inspetor || "—"), fmtDateOnly(v.data)].filter(Boolean).join("  ·  "), 10, { color: "#5B6470", gap: 16 });
 
   (v.estruturas || []).forEach((e) => {
     ensureSpace(30);
@@ -1161,7 +1244,7 @@ function buildAnomaliasCsvContent(v, rows) {
   const lines = [
     "RELATÓRIO DE ANOMALIAS",
     `${v.lojaCd}${v.local ? ", " + v.local : ""}`,
-    `${fmtDateShort(v.data)} - ${v.versao || "V.0"}`,
+    `${fmtDateShort(v.data)}`,
     "",
     header.join(";"),
     ...rows.map((r) => [r.setor, r.tipoEstrutura, r.numeroEstrutura, r.lado, r.montante, r.corte, r.codigoAnomalia, r.nomeAnomalia, r.descricao, r.tipo, r.localizacao, r.grau, r.categoria, r.correcao, r.qtd, r.fabricante].map(csvEscape).join(";")),
@@ -1182,7 +1265,7 @@ function AnomaliasScreen() {
   headerCard.appendChild(el("img", { src: "logo-full.png", alt: state.config.empresa, style: "height:22px;display:block;margin-bottom:4px" }));
   headerCard.appendChild(el("div", { style: "font-family:'Oswald',sans-serif;font-size:18px;font-weight:700;margin-top:2px" }, "RELATÓRIO DE ANOMALIAS"));
   headerCard.appendChild(el("div", { style: "font-size:13px;color:var(--ink-soft);margin-top:2px" }, v.lojaCd + (v.local ? ", " + v.local : "")));
-  headerCard.appendChild(el("div", { class: "mono", style: "font-size:11.5px;color:var(--ink-faint);margin-top:2px" }, `${fmtDateShort(v.data)} - ${v.versao || "V.0"}`));
+  headerCard.appendChild(el("div", { class: "mono", style: "font-size:11.5px;color:var(--ink-faint);margin-top:2px" }, fmtDateShort(v.data)));
   wrap.appendChild(headerCard);
 
   const exportBtn = el("button", { class: "ghost-btn no-print", style: "width:100%;padding:12px;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px" },
@@ -1531,6 +1614,7 @@ function ConfigScreen() {
     setTimeout(() => { saveBtn.textContent = "Salvar configurações"; saveBtn.style.background = "var(--ink)"; }, 1600);
   });
   wrap.appendChild(saveBtn);
+  wrap.appendChild(el("div", { class: "mono", style: "text-align:center;color:var(--ink-faint);font-size:11px;margin-top:18px" }, `Versão do app: ${APP_VERSION}`));
   return wrap;
 }
 
