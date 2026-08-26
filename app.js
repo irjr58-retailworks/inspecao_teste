@@ -84,12 +84,12 @@ const DEFAULT_ITEMS = [
   { id: "piso", codigo: "9.37", categoria: "Gerais", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras", descOpcoes: ["PISO INDUSTRIAL DANIFICADO", "PISO INDUSTRIAL DESNIVELADO", "PAREDE DO PRÉDIO DANIFICADA", "COLUNA DO PRÉDIO DANIFICADA", "ÁGUA EMPOÇADA", "GOTEIRA", "OUTROS"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras" },
   { id: "iluminacao", codigo: "9.45", categoria: "Iluminação", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Aferição de iluminação nos corredores", tipo: "medicao", unidade: "lux", min: 200, peca: "Aferição de iluminação nos corredores" },
 ];
-const APP_VERSION = "2.4";
-const CATALOG_VERSION = 3;
+const APP_VERSION = "2.5";
+const CATALOG_VERSION = 4;
 const DEFAULT_CONFIG = {
   empresa: "Minha Empresa",
   locais: ["Centro de Distribuição 001", "Loja Centro", "Loja Shopping"],
-  fabricantes: ["ESMENA 75X78", "ESMENA TÚNEL 100X105", "PROVENÇA", "OUTROS"],
+  fabricantes: ["ESMENA 75X78", "ESMENA TÚNEL 100X105", "PROVENÇA", "AGUIA ANTIGA MENOR 76X55", "AGUIA ANTIGA MAIOR 90X65", "AGUIA NOVA 91X70", "ESMENA MENOR 76X70", "ESMENA MEZANINO 50X50", "AGRA", "A. BOLLETI", "AVALTEC", "75X65", "90X80", "FAST", "OUTROS"],
   setores: ["SALÃO DE VENDAS", "DEPÓSITO", "CÂMARAS FRIGORÍFICAS", "OUTROS"],
   tiposEstrutura: ["SIMPLES ENTRADA", "DUPLA ENTRADA"],
   itens: DEFAULT_ITEMS,
@@ -99,6 +99,11 @@ function mergeCatalog(existingItens) {
   const defaultIds = new Set(DEFAULT_ITEMS.map((it) => it.id));
   const customExtra = (existingItens || []).filter((it) => !defaultIds.has(it.id));
   return DEFAULT_ITEMS.concat(customExtra);
+}
+function mergeLista(existing, defaults) {
+  const defaultSet = new Set(defaults);
+  const extra = (existing || []).filter((x) => !defaultSet.has(x));
+  return defaults.concat(extra);
 }
 function itensMontante(config) { return (config.itens || []).filter((it) => it.nivel !== "estrutura"); }
 function itensEstruturaCatalogo(config) { return (config.itens || []).filter((it) => it.nivel === "estrutura"); }
@@ -261,7 +266,7 @@ async function boot() {
     state.config = DEFAULT_CONFIG;
     await idbSet("config", "main", DEFAULT_CONFIG);
   } else if ((cfg.catalogVersion || 0) < CATALOG_VERSION) {
-    state.config = { ...cfg, itens: mergeCatalog(cfg.itens), catalogVersion: CATALOG_VERSION };
+    state.config = { ...cfg, itens: mergeCatalog(cfg.itens), fabricantes: mergeLista(cfg.fabricantes, DEFAULT_CONFIG.fabricantes), catalogVersion: CATALOG_VERSION };
     await idbSet("config", "main", state.config);
   } else {
     state.config = cfg;
