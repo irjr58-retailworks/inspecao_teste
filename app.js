@@ -24,6 +24,7 @@ const ICON = {
   x: '<path d="m5 5 14 14M19 5 5 19"/>',
   wrench: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2-2Z"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  minus: '<path d="M5 12h14"/>',
   building: '<path d="M4 21V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16"/><path d="M14 9h5a1 1 0 0 1 1 1v11"/><path d="M9 21V9M9 13H6M9 9H6M4 21h16"/>',
   chevronRight: '<path d="m9 6 6 6-6 6"/>',
 };
@@ -83,7 +84,7 @@ const DEFAULT_ITEMS = [
   { id: "piso", codigo: "9.37", categoria: "Gerais", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras", descOpcoes: ["PISO INDUSTRIAL DANIFICADO", "PISO INDUSTRIAL DESNIVELADO", "PAREDE DO PRÉDIO DANIFICADA", "COLUNA DO PRÉDIO DANIFICADA", "ÁGUA EMPOÇADA", "GOTEIRA", "OUTROS"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras" },
   { id: "iluminacao", codigo: "9.45", categoria: "Iluminação", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Aferição de iluminação nos corredores", tipo: "medicao", unidade: "lux", min: 200, peca: "Aferição de iluminação nos corredores" },
 ];
-const APP_VERSION = "2.0";
+const APP_VERSION = "2.3";
 const CATALOG_VERSION = 3;
 const DEFAULT_CONFIG = {
   empresa: "Minha Empresa",
@@ -102,15 +103,14 @@ function mergeCatalog(existingItens) {
 function itensMontante(config) { return (config.itens || []).filter((it) => it.nivel !== "estrutura"); }
 function itensEstruturaCatalogo(config) { return (config.itens || []).filter((it) => it.nivel === "estrutura"); }
 function itemAplicavel(it, e) {
-  if (it.condicional === "gondola") return !!e.temGondola;
-  if (it.condicional === "mural") return !!e.mural;
-  if (it.condicional === "roletes") return !!e.temRoletes;
+  // Características condicionais (gôndola/mural/roletes) foram removidas — todos os itens sempre aparecem.
   return true;
 }
 const STATUS = {
   pendente: { label: "Pendente", short: "PEND", icon: "clock" },
   ok: { label: "Conforme", short: "OK", icon: "check" },
   problema: { label: "Com anomalia", short: "ANOM", icon: "alert" },
+  naoaplica: { label: "Não se aplica", short: "N/A", icon: "minus" },
 };
 const SEVERITY_ORDER = ["problema", "pendente", "ok"];
 function isProblem(status) { return status === "problema"; }
@@ -474,7 +474,6 @@ function newEstruturaSkeleton() {
   return {
     id: uid(), codigo: "", setor: (state.config.setores || [])[0] || "", tipoEstrutura: (state.config.tiposEstrutura || [])[0] || "",
     rua: "", lado: "", modulos: "", fabricante: (state.config.fabricantes || [])[0] || "", resolvido: false,
-    temGondola: false, mural: false, temRoletes: false,
     montantes: [],
     itensEstrutura: itensEstruturaCatalogo(state.config).map(newEstruturaItemRuntime),
   };
@@ -684,22 +683,6 @@ function EstruturaScreen() {
   header.appendChild(el("div", { id: "save-indicator", class: "save-indicator" }, "✓ Salvo no aparelho"));
   inner.appendChild(header);
 
-  const caractCard = Card({ style: "margin-bottom:14px" });
-  caractCard.appendChild(el("div", { style: "font-size:11.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:10px" }, "Características da estrutura"));
-  [
-    ["temGondola", "Possui gôndola integrada?"],
-    ["mural", "Mural (encostada em parede)?"],
-    ["temRoletes", "Sistema de roletes/trilhos (drive-in / flow-rack)?"],
-  ].forEach(([campo, label]) => {
-    const row = el("label", { style: "display:flex;align-items:center;gap:10px;padding:7px 0;font-size:13.5px;color:var(--ink)" });
-    const cb = el("input", { type: "checkbox" });
-    cb.checked = !!e[campo];
-    cb.addEventListener("change", async () => { e[campo] = cb.checked; await saveVistoriaNow(); render(); });
-    row.appendChild(cb); row.appendChild(document.createTextNode(label));
-    caractCard.appendChild(row);
-  });
-  inner.appendChild(caractCard);
-
   if ((e.itensEstrutura || []).length) {
     inner.appendChild(el("h3", { class: "section-title" }, "Itens da estrutura (avaliados uma vez)"));
     const estList = el("div", { style: "display:flex;flex-direction:column;gap:8px;margin-bottom:18px" });
@@ -750,7 +733,7 @@ function EstruturaScreen() {
       if (filtro === "todos") return true;
       if (filtro === "pendente") return itensAplic.some((i) => i.status === "pendente");
       if (filtro === "problema") return itensAplic.some((i) => isProblem(i.status));
-      if (filtro === "ok") return itensAplic.length > 0 && itensAplic.every((i) => i.status === "ok");
+      if (filtro === "ok") return itensAplic.length > 0 && itensAplic.every((i) => i.status === "ok" || i.status === "naoaplica");
       return true;
     }
     function refreshList() {
@@ -939,6 +922,23 @@ function MontanteScreen() {
   quickRow.appendChild(btnTudoConforme); quickRow.appendChild(btnReplicar);
   inner.appendChild(quickRow);
 
+  const ordenadosParaCopia = (e.montantes || []).slice().sort((a, b) => a.numero - b.numero);
+  const idxAtual = ordenadosParaCopia.findIndex((x) => x.id === m.id);
+  const proximoParaCopia = ordenadosParaCopia[idxAtual + 1];
+  const copyRow = el("div", { style: "margin-bottom:14px" });
+  const btnCopiarProximo = el("button", { class: "ghost-btn", style: "width:100%;padding:10px" }, "→ Copiar pro próximo montante");
+  if (!proximoParaCopia) { btnCopiarProximo.disabled = true; btnCopiarProximo.style.opacity = "0.4"; }
+  btnCopiarProximo.addEventListener("click", async () => {
+    if (!proximoParaCopia) return;
+    const jaTemDados = proximoParaCopia.itens.some((i) => i.status !== "pendente");
+    if (jaTemDados && !confirm(`O Montante Nº ${proximoParaCopia.numero} já tem dados preenchidos. Sobrescrever com o resultado deste montante (Nº ${m.numero})?`)) return;
+    proximoParaCopia.itens = m.itens.map((it) => ({ ...JSON.parse(JSON.stringify(it)), foto: null }));
+    await saveVistoriaNow();
+    go("montante", v.id, e.id, proximoParaCopia.id);
+  });
+  copyRow.appendChild(btnCopiarProximo);
+  inner.appendChild(copyRow);
+
   const itensAplicaveis = m.itens.filter((it) => itemAplicavel(it, e));
   const pending = itensAplicaveis.filter((i) => isProblem(i.status)).length;
   const headRow = el("div", { style: "display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px" },
@@ -979,7 +979,7 @@ function MontanteScreen() {
 
 function statusSelect(item) {
   const sel = el("select", { class: "status-select status-select-" + item.status });
-  [["pendente", "Pendente"], ["ok", "Conforme"], ["problema", "Com anomalia"]].forEach(([val, label]) => {
+  [["pendente", "Pendente"], ["ok", "Conforme"], ["problema", "Com anomalia"], ["naoaplica", "Não se aplica"]].forEach(([val, label]) => {
     sel.appendChild(el("option", { value: val }, label));
   });
   sel.value = item.status;
@@ -987,6 +987,7 @@ function statusSelect(item) {
     const val = e.target.value;
     if (val === "ok") { item.status = "ok"; item.obs = ""; item.descTxt = ""; item.tipoTxt = ""; item.localTxt = ""; item.grauTxt = ""; item.uiCollapsed = false; }
     else if (val === "problema") { item.status = "problema"; item.uiCollapsed = false; }
+    else if (val === "naoaplica") { item.status = "naoaplica"; item.obs = ""; item.descTxt = ""; item.tipoTxt = ""; item.localTxt = ""; item.grauTxt = ""; item.uiCollapsed = false; }
     else { item.status = "pendente"; }
     saveVistoriaDebounced();
     render();
@@ -997,7 +998,7 @@ function ChecklistItemCard(item) {
   const card = Card({ class: "item-card" });
 
   const collapsedAnomalia = item.tipo !== "medicao" && isProblem(item.status) && item.uiCollapsed;
-  const collapsedConforme = item.tipo !== "medicao" && item.status === "ok";
+  const collapsedConforme = item.tipo !== "medicao" && (item.status === "ok" || item.status === "naoaplica");
 
   card.appendChild(el("div", { style: "display:flex;justify-content:space-between;align-items:flex-start;gap:8px" },
     el("div", { class: "item-name" }, CodeBadge(item.codigo), item.nome),
