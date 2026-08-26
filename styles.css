@@ -127,6 +127,7 @@ input, select, textarea { font-family: inherit; }
 .status-btn svg { width: 13px; height: 13px; }
 .status-btn.active-ok { border-color: var(--green); background: var(--green-bg); color: var(--green-dark); }
 .status-btn.active-problema { border-color: var(--amber); background: var(--amber-bg); color: var(--amber-dark); }
+.status-btn.active-naoaplica { border-color: #C9C0E0; background: #EDEBF5; color: #5B4E8C; }
 
 .chip-select-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip-select { padding: 6px 11px; border-radius: 16px; border: 1px solid var(--line); background: #fff; color: var(--ink-soft); font-size: 12px; }

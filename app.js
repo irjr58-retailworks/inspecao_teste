@@ -84,7 +84,7 @@ const DEFAULT_ITEMS = [
   { id: "piso", codigo: "9.37", categoria: "Gerais", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras", descOpcoes: ["PISO INDUSTRIAL DANIFICADO", "PISO INDUSTRIAL DESNIVELADO", "PAREDE DO PRÉDIO DANIFICADA", "COLUNA DO PRÉDIO DANIFICADA", "ÁGUA EMPOÇADA", "GOTEIRA", "OUTROS"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras" },
   { id: "iluminacao", codigo: "9.45", categoria: "Iluminação", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Aferição de iluminação nos corredores", tipo: "medicao", unidade: "lux", min: 200, peca: "Aferição de iluminação nos corredores" },
 ];
-const APP_VERSION = "2.3";
+const APP_VERSION = "2.4";
 const CATALOG_VERSION = 3;
 const DEFAULT_CONFIG = {
   empresa: "Minha Empresa",
@@ -250,6 +250,7 @@ const state = {
   activeEstruturaId: null,
   activeMontanteId: null,
   activeEstItemId: null,
+  activeChecklistItemId: null,
   draftVistoria: null,
   saveTimer: null,
 };
@@ -279,8 +280,8 @@ function updateOfflineBanner() {
 async function persistVistoriaList() {
   state.vistorias = (await idbGetAll("vistorias")).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
-function go(screen, vistoriaId = null, estruturaId = null, montanteId = null, estItemId = null) {
-  state.screen = screen; state.activeVistoriaId = vistoriaId; state.activeEstruturaId = estruturaId; state.activeMontanteId = montanteId; state.activeEstItemId = estItemId;
+function go(screen, vistoriaId = null, estruturaId = null, montanteId = null, estItemId = null, checklistItemId = null) {
+  state.screen = screen; state.activeVistoriaId = vistoriaId; state.activeEstruturaId = estruturaId; state.activeMontanteId = montanteId; state.activeEstItemId = estItemId; state.activeChecklistItemId = checklistItemId;
   render();
   window.scrollTo(0, 0);
 }
@@ -294,9 +295,11 @@ function render() {
   const estAtual = state.draftVistoria && (state.draftVistoria.estruturas || []).find((e) => e.id === state.activeEstruturaId);
   const montAtual = estAtual && (estAtual.montantes || []).find((m) => m.id === state.activeMontanteId);
   const estItemAtual = estAtual && (estAtual.itensEstrutura || []).find((it) => it.id === state.activeEstItemId);
+  const checklistItemAtual = montAtual && montAtual.itens.find((it) => it.id === state.activeChecklistItemId);
   const titles = {
     home: "Início", vistoria: "Inspeção", estrutura: (estAtual && estAtual.codigo) || "Nova estrutura",
     montante: montAtual ? "Montante Nº " + montAtual.numero : "Montante",
+    itemDetail: checklistItemAtual ? checklistItemAtual.nome : "Item",
     estItem: estItemAtual ? estItemAtual.nome : "Item da estrutura",
     history: "Histórico", config: "Configurações",
     hub: (state.vistorias.find((v) => v.id === state.activeVistoriaId) || {}).lojaCd || "Inspeção",
@@ -308,6 +311,7 @@ function render() {
     vistoria: () => go("home"),
     estrutura: () => go("vistoria", state.draftVistoria.id),
     montante: () => go("estrutura", state.draftVistoria.id, state.activeEstruturaId),
+    itemDetail: () => go("montante", state.draftVistoria.id, state.activeEstruturaId, state.activeMontanteId),
     estItem: () => go("estrutura", state.draftVistoria.id, state.activeEstruturaId),
     history: () => go("home"),
     config: () => go("home"),
@@ -323,6 +327,7 @@ function render() {
   if (state.screen === "vistoria") body.appendChild(VistoriaScreen());
   if (state.screen === "estrutura") body.appendChild(EstruturaScreen());
   if (state.screen === "montante") body.appendChild(MontanteScreen());
+  if (state.screen === "itemDetail") body.appendChild(ItemDetailScreen());
   if (state.screen === "estItem") body.appendChild(EstruturaItemScreen());
   if (state.screen === "history") body.appendChild(HistoryScreen());
   if (state.screen === "config") body.appendChild(ConfigScreen());
@@ -347,7 +352,7 @@ function BottomNav() {
   ];
   const nav = el("div", { class: "bottomnav no-print" });
   items.forEach(([id, label, icon]) => {
-    const active = id === state.screen || (id === "vistoria" && ["estrutura", "montante", "estItem"].includes(state.screen)) || (id === "history" && ["hub", "report", "partsInspection", "anomalias"].includes(state.screen));
+    const active = id === state.screen || (id === "vistoria" && ["estrutura", "montante", "estItem", "itemDetail"].includes(state.screen)) || (id === "history" && ["hub", "report", "partsInspection", "anomalias"].includes(state.screen));
     const btn = el("button", { class: active ? "active" : "", onclick: () => go(id === "vistoria" ? "vistoria" : id) },
       el("span", { html: svg(icon, 20) }), el("span", { class: "label" }, label));
     nav.appendChild(btn);
@@ -881,11 +886,17 @@ function FamilySection(familia, itensFamilia, e, m) {
     });
     body.appendChild(btnFam);
   }
-  itensFamilia.forEach((it) => body.appendChild(ChecklistItemCard(it)));
+  itensFamilia.forEach((it) => body.appendChild(ChecklistItemRow(it, e, m)));
   section.appendChild(body);
 
   header.addEventListener("click", () => { familyCollapseState[familia] = !familyCollapseState[familia]; render(); });
   return section;
+}
+function ChecklistItemRow(item, e, m) {
+  const row = el("div", { class: "insp-row", onclick: () => go("itemDetail", state.draftVistoria.id, e.id, m.id, null, item.id) },
+    el("div", {}, el("div", { class: "insp-code" }, CodeBadge(item.codigo), item.nome)),
+    el("div", { style: "display:flex;align-items:center;gap:8px" }, Tag(item.status, "sm"), el("span", { html: svg("chevronRight", 16), style: "color:var(--ink-faint)" })));
+  return Card({ style: "padding:0;margin-bottom:8px;cursor:pointer" }, row);
 }
 
 function MontanteScreen() {
@@ -994,65 +1005,73 @@ function statusSelect(item) {
   });
   return sel;
 }
-function ChecklistItemCard(item) {
-  const card = Card({ class: "item-card" });
+function ItemDetailScreen() {
+  const wrap = el("div", { class: "screen", style: "padding-bottom:30px" });
+  const v = state.draftVistoria;
+  if (!v) { wrap.appendChild(el("div", { class: "empty" }, "Carregando…")); return wrap; }
+  const e = (v.estruturas || []).find((x) => x.id === state.activeEstruturaId);
+  if (!e) { wrap.appendChild(el("div", { class: "empty" }, "Estrutura não encontrada.")); return wrap; }
+  const m = (e.montantes || []).find((x) => x.id === state.activeMontanteId);
+  if (!m) { wrap.appendChild(el("div", { class: "empty" }, "Montante não encontrado.")); return wrap; }
+  const item = m.itens.find((x) => x.id === state.activeChecklistItemId);
+  if (!item) { wrap.appendChild(el("div", { class: "empty" }, "Item não encontrado.")); return wrap; }
 
-  const collapsedAnomalia = item.tipo !== "medicao" && isProblem(item.status) && item.uiCollapsed;
-  const collapsedConforme = item.tipo !== "medicao" && (item.status === "ok" || item.status === "naoaplica");
-
-  card.appendChild(el("div", { style: "display:flex;justify-content:space-between;align-items:flex-start;gap:8px" },
-    el("div", { class: "item-name" }, CodeBadge(item.codigo), item.nome),
-    item.tipo === "medicao" ? Tag(item.status, "sm") : statusSelect(item)));
-
-  if (collapsedConforme) {
-    return card;
-  }
-
-  if (collapsedAnomalia) {
-    const resumoPartes = [item.descTxt, item.tipoTxt, item.localTxt, item.grauTxt].filter(Boolean);
-    card.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:4px" }, resumoPartes.length ? resumoPartes.join(" · ") : "Com anomalia registrada"));
-    const editBtn = el("button", { class: "ghost-btn", style: "margin-top:8px;padding:7px 14px" }, "✎ Editar");
-    editBtn.addEventListener("click", () => { item.uiCollapsed = false; render(); });
-    card.appendChild(editBtn);
-    return card;
-  }
+  wrap.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-faint);margin-bottom:4px" }, `Estrutura ${e.codigo || "—"} · Montante Nº ${m.numero}`));
+  wrap.appendChild(el("div", { class: "item-name", style: "font-size:16px;margin-bottom:14px" }, CodeBadge(item.codigo), item.nome));
 
   if (item.tipo === "medicao") {
-    const row = el("div", { style: "display:flex;align-items:center;gap:8px" });
+    const row = el("div", { style: "display:flex;align-items:center;gap:8px;margin-bottom:14px" });
     const input = el("input", { class: "input", type: "number", inputmode: "decimal", value: item.valor || "", placeholder: `Valor em ${item.unidade} (mínimo ${item.min})`, style: "flex:1" });
-    input.addEventListener("input", (e) => {
-      item.valor = e.target.value;
+    input.addEventListener("input", (e2) => {
+      item.valor = e2.target.value;
       item.status = item.valor === "" ? "pendente" : statusFromMedicao(item.valor, item.min);
       saveVistoriaDebounced();
       render();
     });
     row.appendChild(input);
-    card.appendChild(row);
+    row.appendChild(Tag(item.status, "sm"));
+    wrap.appendChild(row);
   } else {
+    const btnRow = el("div", { style: "display:flex;flex-direction:column;gap:8px;margin-bottom:16px" });
+    const opcoes = [["ok", "Conforme", "check"], ["problema", "Com anomalia", "alert"], ["naoaplica", "Não se aplica", "minus"]];
+    opcoes.forEach(([val, label, icon]) => {
+      const active = item.status === val;
+      const btn = el("button", { class: "status-btn" + (active ? " active-" + val : ""), style: "width:100%;padding:13px;font-size:13px" },
+        el("span", { html: svg(icon, 16) }), label);
+      btn.addEventListener("click", () => {
+        if (val === "ok" || val === "naoaplica") { item.status = val; item.obs = ""; item.descTxt = ""; item.tipoTxt = ""; item.localTxt = ""; item.grauTxt = ""; }
+        else { item.status = "problema"; }
+        saveVistoriaDebounced();
+        render();
+      });
+      btnRow.appendChild(btn);
+    });
+    wrap.appendChild(btnRow);
+
     if (isProblem(item.status)) {
-      if (item.descOpcoes) card.appendChild(Field("Descrição", suggestInput(item.descTxt, (val) => { item.descTxt = val; saveVistoriaDebounced(); }, "Digite a descrição da anomalia", item.descOpcoes)));
-      if (item.tipoOpcoes) card.appendChild(Field("Tipo", suggestInput(item.tipoTxt, (val) => { item.tipoTxt = val; saveVistoriaDebounced(); }, "Digite o tipo/componente", item.tipoOpcoes)));
-      card.appendChild(Field("Nível", inputEl(item.corte || "", (val) => { item.corte = val; saveVistoriaDebounced(); }, "Ex: 1, 3, 18")));
-      if (item.localOpcoes) card.appendChild(Field(item.localLabel || "Localização", suggestInput(item.localTxt, (val) => { item.localTxt = val; saveVistoriaDebounced(); }, "Digite a localização", item.localOpcoes)));
-      card.appendChild(Field("Grau", suggestInput(item.grauTxt, (val) => { item.grauTxt = val; saveVistoriaDebounced(); }, "Digite o grau (Leve, Médio, Grave, Gravíssimo)", GRAU_OPCOES)));
+      if (item.descOpcoes) wrap.appendChild(Field("Descrição", suggestInput(item.descTxt, (val) => { item.descTxt = val; saveVistoriaDebounced(); }, "Digite a descrição da anomalia", item.descOpcoes)));
+      if (item.tipoOpcoes) wrap.appendChild(Field("Tipo", suggestInput(item.tipoTxt, (val) => { item.tipoTxt = val; saveVistoriaDebounced(); }, "Digite o tipo/componente", item.tipoOpcoes)));
+      wrap.appendChild(Field("Nível", inputEl(item.corte || "", (val) => { item.corte = val; saveVistoriaDebounced(); }, "Ex: 1, 3, 18")));
+      if (item.localOpcoes) wrap.appendChild(Field(item.localLabel || "Localização", suggestInput(item.localTxt, (val) => { item.localTxt = val; saveVistoriaDebounced(); }, "Digite a localização", item.localOpcoes)));
+      wrap.appendChild(Field("Grau", suggestInput(item.grauTxt, (val) => { item.grauTxt = val; saveVistoriaDebounced(); }, "Digite o grau (Leve, Médio, Grave, Gravíssimo)", GRAU_OPCOES)));
 
-      const obsBox = el("textarea", { class: "input", rows: 2, placeholder: "Observação (opcional)", style: "margin-top:10px;resize:vertical" });
+      const obsBox = el("textarea", { class: "input", rows: 2, placeholder: "Observação (opcional)", style: "resize:vertical" });
       obsBox.value = item.obs || "";
-      obsBox.addEventListener("input", (e) => { item.obs = e.target.value; saveVistoriaDebounced(); });
-      card.appendChild(el("div", { class: "field" }, el("label", {}, "Observações"), obsBox));
+      obsBox.addEventListener("input", (e2) => { item.obs = e2.target.value; saveVistoriaDebounced(); });
+      wrap.appendChild(el("div", { class: "field" }, el("label", {}, "Observações"), obsBox));
 
-      card.appendChild(Field("Quantidade", inputEl(item.qtd == null ? 1 : item.qtd, (val) => { item.qtd = val; saveVistoriaDebounced(); }, "1", "number")));
+      wrap.appendChild(Field("Quantidade", inputEl(item.qtd == null ? 1 : item.qtd, (val) => { item.qtd = val; saveVistoriaDebounced(); }, "1", "number")));
 
-      const photoWrap = el("div", { style: "margin-top:8px" });
+      const photoWrap = el("div", { style: "margin-bottom:8px" });
       renderPhotoArea(photoWrap, item);
-      card.appendChild(photoWrap);
-
-      const okBtn = el("button", { class: "submit-btn", style: "width:100%;margin-top:12px;padding:11px" }, "✓ OK, confirmar e recolher");
-      okBtn.addEventListener("click", () => { item.uiCollapsed = true; saveVistoriaNow(); render(); });
-      card.appendChild(okBtn);
+      wrap.appendChild(photoWrap);
     }
   }
-  return card;
+
+  const backBtn = el("button", { class: "submit-btn", style: "width:100%;margin-top:14px" }, "Voltar para o montante");
+  backBtn.addEventListener("click", async () => { await saveVistoriaNow(); go("montante", v.id, e.id, m.id); });
+  wrap.appendChild(backBtn);
+  return wrap;
 }
 function ChipMultiSelect(label, options, selectedArr, onChange) {
   const wrap = el("div", { class: "field" }, el("label", {}, label + (selectedArr.length ? ` (${selectedArr.length} selecionada${selectedArr.length > 1 ? "s" : ""})` : "")));
