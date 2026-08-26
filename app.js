@@ -84,7 +84,8 @@ const DEFAULT_ITEMS = [
   { id: "piso", codigo: "9.37", categoria: "Gerais", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras", descOpcoes: ["PISO INDUSTRIAL DANIFICADO", "PISO INDUSTRIAL DESNIVELADO", "PAREDE DO PRÉDIO DANIFICADA", "COLUNA DO PRÉDIO DANIFICADA", "ÁGUA EMPOÇADA", "GOTEIRA", "OUTROS"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras" },
   { id: "iluminacao", codigo: "9.45", categoria: "Iluminação", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Aferição de iluminação nos corredores", tipo: "medicao", unidade: "lux", min: 200, peca: "Aferição de iluminação nos corredores" },
 ];
-const APP_VERSION = "2.8";
+const APP_VERSION = "2.10";
+const APP_VERSION_DATE = "26/08/2026";
 const CATALOG_VERSION = 4;
 const DEFAULT_CONFIG = {
   empresa: "Minha Empresa",
@@ -442,7 +443,7 @@ function HomeScreen() {
     recentes.forEach((v) => list.appendChild(VistoriaRow(v, false)));
     wrap.appendChild(list);
   }
-  wrap.appendChild(el("div", { class: "mono", style: "text-align:center;color:var(--ink-faint);font-size:10.5px;margin-top:20px" }, `v${APP_VERSION}`));
+  wrap.appendChild(el("div", { class: "mono", style: "text-align:center;color:var(--ink-faint);font-size:10.5px;margin-top:20px" }, `v${APP_VERSION} · ${APP_VERSION_DATE}`));
   return wrap;
 }
 function VistoriaRow(v, isDraft) {
@@ -468,7 +469,7 @@ function VistoriaRow(v, isDraft) {
     el("div", {},
       el("div", { class: "insp-code" }, v.lojaCd || "(sem Loja/CD ainda)"),
       el("div", { class: "insp-sub" }, (v.local ? v.local + " · " : "") + nEst + " estrutura" + (nEst === 1 ? "" : "s") + (v.inspetor ? " · " + v.inspetor : "")),
-      el("div", { class: "insp-date" }, fmtDateOnly(v.data) || fmtDate(v.createdAt))),
+      el("div", { class: "insp-date" }, isDraft ? fmtDate(v.createdAt) : fmtDate(v.finalizadaAt || v.createdAt))),
     rightSide);
   return Card({ style: "padding:0;cursor:pointer" }, row);
 }
@@ -1686,6 +1687,7 @@ function statBox(num, label) {
 }
 function PainelScreen() {
   const wrap = el("div", { class: "screen" });
+  try {
   const v = state.vistorias.find((x) => x.id === state.activeVistoriaId);
   if (!v) { wrap.appendChild(el("div", { class: "empty" }, "Inspeção não encontrada.")); return wrap; }
   const ind = buildIndicadores(v);
@@ -1721,7 +1723,7 @@ function PainelScreen() {
     const max = ind.topAnomalias[0][1];
     ind.topAnomalias.forEach(([nome, qtd]) => {
       const card = Card({ style: "padding:10px 12px" });
-      card.appendChild(el("div", { style: "display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;gap:8px" }, el("span", {}, nome), el("span", { class: "mono", style: "font-weight:700" }, qtd)));
+      card.appendChild(el("div", { style: "display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;gap:8px" }, el("span", {}, nome), el("span", { class: "mono", style: "font-weight:700" }, String(qtd))));
       card.appendChild(el("div", { style: "background:var(--bg);border-radius:5px;height:6px;overflow:hidden" }, el("div", { style: `background:var(--amber);height:100%;width:${Math.max(6, (qtd / max) * 100)}%` })));
       list.appendChild(card);
     });
@@ -1753,6 +1755,11 @@ function PainelScreen() {
 
   if (!ind.totalApontamentos) {
     wrap.appendChild(el("div", { class: "card empty" }, "Nenhum apontamento registrado nesta inspeção."));
+  }
+  } catch (err) {
+    console.error("Erro no Painel de Indicadores:", err);
+    wrap.innerHTML = "";
+    wrap.appendChild(el("div", { class: "card empty" }, "Não foi possível carregar o painel desta inspeção. Um erro técnico foi registrado no console do navegador — se puder, me mande um print disso (F12 → Console)."));
   }
   return wrap;
 }
@@ -2065,7 +2072,7 @@ function ConfigScreen() {
     setTimeout(() => { saveBtn.textContent = "Salvar configurações"; saveBtn.style.background = "var(--ink)"; }, 1600);
   });
   wrap.appendChild(saveBtn);
-  wrap.appendChild(el("div", { class: "mono", style: "text-align:center;color:var(--ink-faint);font-size:11px;margin-top:18px" }, `Versão do app: ${APP_VERSION}`));
+  wrap.appendChild(el("div", { class: "mono", style: "text-align:center;color:var(--ink-faint);font-size:11px;margin-top:18px" }, `Versão do app: ${APP_VERSION} · Revisão: ${APP_VERSION_DATE}`));
   return wrap;
 }
 
