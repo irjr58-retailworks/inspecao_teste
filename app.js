@@ -84,7 +84,7 @@ const DEFAULT_ITEMS = [
   { id: "piso", codigo: "9.37", categoria: "Gerais", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras", descOpcoes: ["PISO INDUSTRIAL DANIFICADO", "PISO INDUSTRIAL DESNIVELADO", "PAREDE DO PRÉDIO DANIFICADA", "COLUNA DO PRÉDIO DANIFICADA", "ÁGUA EMPOÇADA", "GOTEIRA", "OUTROS"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras" },
   { id: "iluminacao", codigo: "9.45", categoria: "Iluminação", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Aferição de iluminação nos corredores", tipo: "medicao", unidade: "lux", min: 200, peca: "Aferição de iluminação nos corredores" },
 ];
-const APP_VERSION = "2.5";
+const APP_VERSION = "2.6";
 const CATALOG_VERSION = 4;
 const DEFAULT_CONFIG = {
   empresa: "Minha Empresa",
@@ -482,8 +482,8 @@ function newEstruturaItemRuntime(base) {
 }
 function newEstruturaSkeleton() {
   return {
-    id: uid(), codigo: "", setor: (state.config.setores || [])[0] || "", tipoEstrutura: (state.config.tiposEstrutura || [])[0] || "",
-    rua: "", lado: "", modulos: "", fabricante: (state.config.fabricantes || [])[0] || "", resolvido: false,
+    id: uid(), codigo: "", setor: "", tipoEstrutura: "",
+    rua: "", lado: "", modulos: "", fabricante: "", resolvido: false,
     montantes: [],
     itensEstrutura: itensEstruturaCatalogo(state.config).map(newEstruturaItemRuntime),
   };
