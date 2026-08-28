@@ -84,7 +84,7 @@ const DEFAULT_ITEMS = [
   { id: "piso", codigo: "9.37", categoria: "Gerais", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras", descOpcoes: ["PISO INDUSTRIAL DANIFICADO", "PISO INDUSTRIAL DESNIVELADO", "PAREDE DO PRÉDIO DANIFICADA", "COLUNA DO PRÉDIO DANIFICADA", "ÁGUA EMPOÇADA", "GOTEIRA", "OUTROS"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras" },
   { id: "iluminacao", codigo: "9.45", categoria: "Iluminação", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Aferição de iluminação nos corredores", tipo: "medicao", unidade: "lux", min: 200, peca: "Aferição de iluminação nos corredores" },
 ];
-const APP_VERSION = "2.10";
+const APP_VERSION = "2.13";
 const APP_VERSION_DATE = "26/08/2026";
 const CATALOG_VERSION = 4;
 const DEFAULT_CONFIG = {
@@ -391,15 +391,36 @@ function selectEl(options, value, onChange) {
   return select;
 }
 function suggestInput(value, onChange, placeholder, options) {
-  const listId = "dl-" + uid();
-  const input = el("input", { class: "input", value: value || "", placeholder: placeholder || "", list: listId, autocomplete: "off" });
-  input.addEventListener("input", (e) => onChange(e.target.value));
-  const datalist = el("datalist", { id: listId });
-  (options || []).forEach((o) => datalist.appendChild(el("option", { value: o })));
-  const frag = document.createDocumentFragment();
-  frag.appendChild(input);
-  frag.appendChild(datalist);
-  return frag;
+  const wrap = el("div", { style: "position:relative" });
+  const input = el("input", { class: "input", value: value || "", placeholder: placeholder || "", autocomplete: "off" });
+  const list = el("div", { class: "suggest-list" });
+  list.style.display = "none";
+
+  function renderList(filterText) {
+    const q = (filterText || "").toLowerCase();
+    const matches = (options || []).filter((o) => o.toLowerCase().includes(q)).slice(0, 40);
+    list.innerHTML = "";
+    if (!matches.length) { list.style.display = "none"; return; }
+    matches.forEach((opt) => {
+      const item = el("div", { class: "suggest-item" }, opt);
+      item.addEventListener("mousedown", (ev) => ev.preventDefault());
+      item.addEventListener("click", () => {
+        input.value = opt;
+        onChange(opt);
+        list.style.display = "none";
+      });
+      list.appendChild(item);
+    });
+    list.style.display = "block";
+  }
+
+  input.addEventListener("focus", () => renderList(input.value));
+  input.addEventListener("input", (e) => { onChange(e.target.value); renderList(e.target.value); });
+  input.addEventListener("blur", () => { setTimeout(() => { list.style.display = "none"; }, 180); });
+
+  wrap.appendChild(input);
+  wrap.appendChild(list);
+  return wrap;
 }
 
 /* ---------------- Home ---------------- */
@@ -648,7 +669,7 @@ function EstruturaScreen() {
   if (!e) { inner.appendChild(el("div", { class: "empty" }, "Estrutura não encontrada.")); return wrap; }
 
   const header = Card({ style: "margin-bottom:14px" });
-  header.appendChild(Field("Código da estrutura", inputEl(e.codigo, (val) => { e.codigo = val; saveVistoriaDebounced(); }, "Ex: 03/04 (PRUMO E LUX)")));
+  header.appendChild(Field("Código da estrutura", inputEl(e.codigo, (val) => { e.codigo = val; saveVistoriaDebounced(); }, "Digite a identificação da estrutura")));
   header.appendChild(el("div", { class: "row2" },
     (() => {
       const fieldWrap = el("div", { class: "field" }, el("label", {}, "Setor"));
@@ -677,7 +698,7 @@ function EstruturaScreen() {
     Field("Lado", inputEl(e.lado, (val) => { e.lado = val; saveVistoriaDebounced(); }, "Ex: ímpar"))));
   header.appendChild(el("div", { class: "row2" },
     (() => {
-      const fieldWrap = el("div", { class: "field" }, el("label", {}, "Qtd. módulos"));
+      const fieldWrap = el("div", { class: "field" }, el("label", {}, "Qtd. Montantes"));
       const input = inputEl(e.modulos, (val) => { e.modulos = val; saveVistoriaDebounced(); }, "Ex: 32", "number");
       input.addEventListener("blur", () => { syncMontantes(e); saveVistoriaNow().then(render); });
       fieldWrap.appendChild(input);
@@ -698,10 +719,19 @@ function EstruturaScreen() {
   inner.appendChild(header);
 
   if ((e.itensEstrutura || []).length) {
-    inner.appendChild(el("h3", { class: "section-title" }, "Itens da estrutura (avaliados uma vez)"));
-    const estList = el("div", { style: "display:flex;flex-direction:column;gap:8px;margin-bottom:18px" });
-    e.itensEstrutura.forEach((it) => estList.appendChild(EstruturaItemRow(it, e, v)));
-    inner.appendChild(estList);
+    if (!(e.id in estItemsCollapseState)) estItemsCollapseState[e.id] = true;
+    const collapsed = estItemsCollapseState[e.id];
+    const estHeader = el("div", { class: "card", style: "padding:12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px" },
+      el("div", { style: "font-weight:700;font-size:13.5px" }, "Itens da estrutura (avaliados uma vez)"),
+      el("span", { html: svg("chevronRight", 16, collapsed ? "" : "transform:rotate(90deg)"), style: "color:var(--ink-faint);flex-shrink:0" }));
+    estHeader.addEventListener("click", () => { estItemsCollapseState[e.id] = !estItemsCollapseState[e.id]; render(); });
+    inner.appendChild(estHeader);
+
+    if (!collapsed) {
+      const estList = el("div", { style: "display:flex;flex-direction:column;gap:8px;margin-bottom:18px" });
+      e.itensEstrutura.forEach((it) => estList.appendChild(EstruturaItemRow(it, e, v)));
+      inner.appendChild(estList);
+    }
   }
 
   const montHead = el("div", { style: "display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px" },
@@ -713,7 +743,7 @@ function EstruturaScreen() {
   const target = parseInt(e.modulos, 10) || 0;
   if (target > (e.montantes || []).length) {
     const syncBar = el("div", { style: "display:flex;align-items:center;justify-content:space-between;background:var(--amber-bg);color:var(--amber-dark);padding:8px 12px;border-radius:8px;font-size:12.5px;margin-bottom:10px" },
-      el("span", {}, `Faltam ${target - (e.montantes || []).length} montante(s) para bater com a Qtd. módulos.`));
+      el("span", {}, `Faltam ${target - (e.montantes || []).length} montante(s) para bater com a Qtd. Montantes.`));
     const syncBtn = el("button", { class: "ghost-btn", style: "background:#fff" }, "Gerar agora");
     syncBtn.addEventListener("click", async () => { syncMontantes(e); await saveVistoriaNow(); render(); });
     syncBar.appendChild(syncBtn);
@@ -773,7 +803,7 @@ function EstruturaScreen() {
     inner.appendChild(montList);
     inner.appendChild(loadMoreWrap);
   } else {
-    inner.appendChild(el("div", { class: "card empty" }, "Informe a Qtd. módulos acima para gerar os montantes automaticamente."));
+    inner.appendChild(el("div", { class: "card empty" }, "Informe a Qtd. Montantes acima para gerar os montantes automaticamente."));
   }
 
   const submitWrap = el("div", { class: "sticky-submit no-print" },
@@ -870,6 +900,7 @@ function MontanteRow(m, e, v) {
 
 /* ---------------- Montante (checklist 9.x) ---------------- */
 const familyCollapseState = {};
+const estItemsCollapseState = {};
 function FamilySection(familia, itensFamilia, e, m) {
   if (!(familia in familyCollapseState)) familyCollapseState[familia] = true;
   const st = overallStatus(itensFamilia);
@@ -2041,7 +2072,7 @@ function ConfigScreen() {
   const exportBtn = el("button", { class: "ghost-btn", style: "flex:1;padding:10px" }, "Exportar backup (.json)");
   exportBtn.addEventListener("click", async () => {
     const all = { config: state.config, vistorias: await idbGetAll("vistorias"), orderedParts: state.orderedParts, exportadoEm: new Date().toISOString() };
-    download(`backup-inspecoes-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(all, null, 2), "application/json");
+    download(`backup-inspecoes-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(all), "application/json");
   });
   const importInput = el("input", { type: "file", accept: "application/json", style: "display:none" });
   const importBtn = el("button", { class: "ghost-btn", style: "flex:1;padding:10px" }, "Importar backup");

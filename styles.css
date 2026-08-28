@@ -131,6 +131,15 @@ input, select, textarea { font-family: inherit; }
 
 .chip-select-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip-select { padding: 6px 11px; border-radius: 16px; border: 1px solid var(--line); background: #fff; color: var(--ink-soft); font-size: 12px; }
+
+.suggest-list {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px;
+  max-height: 220px; overflow-y: auto; box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+}
+.suggest-item { padding: 10px 12px; font-size: 13.5px; color: var(--ink); border-bottom: 1px solid var(--line); cursor: pointer; }
+.suggest-item:last-child { border-bottom: none; }
+.suggest-item:active { background: var(--bg); }
 .chip-select.active { border-color: var(--ink); background: var(--ink); color: #fff; font-weight: 600; }
 .niveis-hint { font-size: 10.5px; color: var(--ink-faint); margin-top: 5px; display: flex; gap: 10px; }
 
