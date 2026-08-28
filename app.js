@@ -42,7 +42,7 @@ const DEFAULT_ITEMS = [
   { id: "colunaSemPlaca", codigo: "9.39", categoria: "Estruturais", familia: "Base e Fixação ao Piso", nivel: "montante", nome: "Coluna sem placa de base", descOpcoes: ["COLUNA SEM PLACA DE BASE"], tipoOpcoes: ["PLACA DE BASE", "PLACA DE BASE CONTÍNUA"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Coluna sem placa de base" },
   { id: "colunaSoltaBase", codigo: "9.15", categoria: "Estruturais", familia: "Colunas e Prumo", nivel: "montante", nome: "Colunas sem fixação e/ou com fixações afrouxadas na placa de base", descOpcoes: ["COLUNA COM FIXAÇÕES AFROUXADAS NA PLACA DE BASE (1/2)", "COLUNA COM FIXAÇÕES AFROUXADAS NA PLACA DE BASE (2/2)", "COLUNA SEM FIXAÇÃO NA PLACA DE BASE (1/2)", "COLUNA SEM FIXAÇÃO NA PLACA DE BASE (2/2)"], localOpcoes: ["FRONTAL", "TRASEIRA", "FRONTAL / TRASEIRA"], peca: "Colunas sem fixação e/ou com fixações afrouxadas na placa de base" },
   { id: "colunaDanificada", codigo: "9.16", categoria: "Estruturais", familia: "Colunas e Prumo", nivel: "montante", nome: "Colunas torcidas e/ou com impactos e deformadas", descOpcoes: ["COLUNA DANIFICADA", "COLUNA TORCIDA", "COLUNA TROCADA"], localOpcoes: ["FRONTAL", "TRASEIRA", "FRONTAL / TRASEIRA"], peca: "Colunas torcidas e/ou com impactos e deformadas" },
-  { id: "prumo", codigo: "9.17", categoria: "Estruturais", familia: "Colunas e Prumo", nivel: "montante", nome: "Colunas com problemas de prumo", descOpcoes: ["COLUNA NO PRUMO", "COLUNA NA TOLERÂNCIA DO PRUMO", "COLUNA FORA DE PRUMO", "COLUNA SEM ACESSO"], localOpcoes: ["LONGITUDINAL", "TRANSVERSAL"], localLabel: "Localização (Longitudinal / Transversal)", peca: "Colunas com problemas de prumo" },
+  { id: "prumo", codigo: "9.17", categoria: "Estruturais", familia: "Colunas e Prumo", nivel: "montante", nome: "Colunas com problemas de prumo", descOpcoes: ["COLUNA NO PRUMO", "COLUNA NA TOLERÂNCIA DO PRUMO", "COLUNA FORA DE PRUMO", "COLUNA FORA DE PRUMO GRAVE", "COLUNA FORA DE PRUMO GRAVÍSSIMO", "COLUNA SEM ACESSO"], localOpcoes: ["LONGITUDINAL", "TRANSVERSAL"], localLabel: "Localização (Longitudinal / Transversal)", peca: "Colunas com problemas de prumo" },
   { id: "juncao", codigo: "9.19", categoria: "Estruturais", familia: "Colunas e Prumo", nivel: "montante", nome: "Emenda das colunas danificada, faltante ou com fixações afrouxadas", descOpcoes: ["EMENDA SEM FIXAÇÃO", "EMENDA COM FIXAÇÕES AFROUXADAS", "EMENDA COM FALHA NA INSTALAÇÃO (VÃO ENTRE COLUNAS)", "FALHA NO CORTE DA COLUNA", "EMENDA DANIFICADA", "EMENDA FALTANTE"], localOpcoes: ["FRONTAL", "TRASEIRA", "FRONTAL / TRASEIRA"], peca: "Emenda das colunas danificada, faltante ou com fixações afrouxadas" },
   { id: "desalinh", codigo: "9.20", categoria: "Estruturais", familia: "Colunas e Prumo", nivel: "montante", nome: "Desalinhamento das colunas do montante e/ou da estrutura", descOpcoes: ["COLUNA DESALINHADA", "ESTRUTURA DESALINHADA"], localOpcoes: ["FRONTAL", "TRASEIRA", "GERAL"], peca: "Desalinhamento das colunas do montante e/ou da estrutura" },
   { id: "sobrecarga", codigo: "9.2", categoria: "Estruturais", familia: "Longarinas", nivel: "montante", nome: "Sobrecarga nas longarinas e/ou longarinas com flecha", descOpcoes: ["SOBRECARGA NAS LONGARINAS", "LONGARINA COM FLECHA"], tipoOpcoes: ["LONGARINA SUPERIOR", "LONGARINA INFERIOR", "LONGARINA MÓVEL", "LONGARINA PICKING", "LONGARINA BASE", "LONGARINA ESCALONADA", "LONGARINA INFERIOR DA GÔNDOLA", "LONGARINA DA GÔNDOLA DIREITA", "LONGARINA DA GÔNDOLA ESQUERDA"], localOpcoes: ["FRONTAL", "TRASEIRA", "FRONTAL / TRASEIRA"], peca: "Sobrecarga nas longarinas e/ou longarinas com flecha" },
@@ -84,21 +84,25 @@ const DEFAULT_ITEMS = [
   { id: "piso", codigo: "9.37", categoria: "Gerais", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras", descOpcoes: ["PISO INDUSTRIAL DANIFICADO", "PISO INDUSTRIAL DESNIVELADO", "PAREDE DO PRÉDIO DANIFICADA", "COLUNA DO PRÉDIO DANIFICADA", "ÁGUA EMPOÇADA", "GOTEIRA", "OUTROS"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras" },
   { id: "iluminacao", codigo: "9.45", categoria: "Iluminação", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Aferição de iluminação nos corredores", tipo: "medicao", unidade: "lux", min: 200, peca: "Aferição de iluminação nos corredores" },
 ];
-const APP_VERSION = "2.13";
-const APP_VERSION_DATE = "26/08/2026";
-const CATALOG_VERSION = 4;
+const APP_VERSION = "2.15";
+const APP_VERSION_DATE = "28/08/2026";
+const CATALOG_VERSION = 5;
 const DEFAULT_CONFIG = {
   empresa: "Minha Empresa",
   locais: ["Centro de Distribuição 001", "Loja Centro", "Loja Shopping"],
   fabricantes: ["ESMENA 75X78", "ESMENA TÚNEL 100X105", "PROVENÇA", "AGUIA ANTIGA MENOR 76X55", "AGUIA ANTIGA MAIOR 90X65", "AGUIA NOVA 91X70", "ESMENA MENOR 76X70", "ESMENA MEZANINO 50X50", "AGRA", "A. BOLLETI", "AVALTEC", "75X65", "90X80", "FAST", "OUTROS"],
-  setores: ["SALÃO DE VENDAS", "DEPÓSITO", "CÂMARAS FRIGORÍFICAS", "OUTROS"],
+  setores: ["SALÃO DE VENDAS", "DEPÓSITO", "CÂMARAS FRIGORÍFICAS RESFRIADOS", "CÂMARAS FRIGORÍFICAS CONGELADOS", "CÂMARAS FRIGORÍFICAS", "OUTROS"],
   tiposEstrutura: ["SIMPLES ENTRADA", "DUPLA ENTRADA"],
   itens: DEFAULT_ITEMS,
   catalogVersion: CATALOG_VERSION,
 };
 function mergeCatalog(existingItens) {
   const defaultIds = new Set(DEFAULT_ITEMS.map((it) => it.id));
-  const customExtra = (existingItens || []).filter((it) => !defaultIds.has(it.id));
+  const customExtra = (existingItens || []).filter((it) => !defaultIds.has(it.id)).map((it) => ({
+    ...it,
+    nivel: it.nivel || "montante",
+    familia: it.familia || "Configuração, Adaptações e Uso",
+  }));
   return DEFAULT_ITEMS.concat(customExtra);
 }
 function mergeLista(existing, defaults) {
@@ -138,7 +142,13 @@ function fmtDateShort(isoDate) {
   const [y, m, d] = isoDate.split("-");
   return d && m && y ? `${d}/${m}/${y.slice(2)}` : isoDate;
 }
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+function todayStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 function overallStatus(itens) {
   for (const s of SEVERITY_ORDER) {
     if (itens.some((i) => i.status === s)) return s;
@@ -155,20 +165,126 @@ function statusFromMedicao(valor, min) {
   if (v >= min) return "ok";
   return "problema";
 }
+function prumoStatusFromDesc(desc) {
+  const t = String(desc || "").trim().toUpperCase();
+  if (!t) return "pendente";
+  if (t.includes("SEM ACESSO")) return "naoaplica";
+  if (t.includes("FORA DE PRUMO")) return "problema";
+  if (t.includes("NO PRUMO") || t.includes("NA TOLERÂNCIA")) return "ok";
+  return "pendente";
+}
+function ocorrenciaStatus(oc, item) {
+  if (item && item.tipo === "medicao") return statusFromMedicao(oc && oc.valor, item.min);
+  if (item && item.id === "prumo") return prumoStatusFromDesc(oc && oc.descTxt);
+  return (oc && oc.status) || "problema";
+}
+function occurrencePhotos(obj) {
+  if (!obj) return [];
+  const arr = Array.isArray(obj.fotos) ? obj.fotos.filter(Boolean) : [];
+  if (!arr.length && obj.foto) arr.push(obj.foto);
+  return arr.slice(0, 4);
+}
+function normalizeOccurrence(oc, item, defaultStatus = "problema") {
+  oc = oc || {};
+  oc.id = oc.id || uid();
+  oc.fotos = occurrencePhotos(oc);
+  delete oc.foto;
+  if (!oc.status) oc.status = item && (item.tipo === "medicao" || item.id === "prumo") ? ocorrenciaStatus(oc, item) : defaultStatus;
+  if (oc.qtd == null) oc.qtd = 1;
+  return oc;
+}
+function montanteItemStatus(item) {
+  const occ = (item.ocorrencias || []).map((oc) => ocorrenciaStatus(oc, item));
+  if (occ.includes("problema")) return "problema";
+  if (occ.includes("pendente")) return "pendente";
+  if (occ.length && occ.every((s) => s === "ok" || s === "naoaplica")) return "ok";
+  if (item.status === "naoaplica") return "naoaplica";
+  if (item.revisado || item.status === "ok") return "ok";
+  if (item.status === "problema") return "problema"; // compatibilidade com v2.14
+  return "pendente";
+}
+function syncMontanteItemStatus(item) { item.status = montanteItemStatus(item); return item.status; }
+function normalizeMontanteItem(item) {
+  item.ocorrencias = Array.isArray(item.ocorrencias) ? item.ocorrencias : [];
+  // Converte uma anomalia v2.14 em uma ocorrência v2.15 sem perder os dados existentes.
+  if (!item.ocorrencias.length && item.status === "problema") {
+    item.ocorrencias.push(normalizeOccurrence({
+      descTxt: item.descTxt || "", tipoTxt: item.tipoTxt || "", localTxt: item.localTxt || "",
+      grauTxt: item.grauTxt || "", corte: item.corte || "", qtd: item.qtd == null ? 1 : item.qtd,
+      correcao: item.correcao || "", obs: item.obs || "", foto: item.foto || null,
+      valor: item.valor || "", status: "problema"
+    }, item));
+  }
+  item.ocorrencias = item.ocorrencias.map((oc) => normalizeOccurrence(oc, item));
+  item.revisado = item.revisado || item.status === "ok" || item.status === "naoaplica";
+  delete item.foto;
+  syncMontanteItemStatus(item);
+  return item;
+}
+function normalizeVistoria(v) {
+  if (!v) return v;
+  (v.estruturas || []).forEach((e) => {
+    e.montantes = e.montantes || [];
+    e.observacoesGerais = e.observacoesGerais || "";
+    if (e.qtdEstimada == null) e.qtdEstimada = e.modulos || "";
+    (e.itensEstrutura || []).forEach((it) => {
+      it.ocorrencias = (it.ocorrencias || []).map((oc) => normalizeOccurrence(oc, it));
+    });
+    e.montantes.forEach((m) => {
+      m.fabricante = m.fabricante == null ? (e.fabricante || "") : m.fabricante;
+      m.tipoMontante = m.tipoMontante || "";
+      m.observacoes = m.observacoes || "";
+      m.itens = (m.itens || []).map(normalizeMontanteItem);
+    });
+  });
+  return v;
+}
+function montanteProblemEntries(e) {
+  return (e.montantes || []).flatMap((m) => (m.itens || []).flatMap((item) => {
+    const occs = (item.ocorrencias || []).filter((oc) => ocorrenciaStatus(oc, item) === "problema");
+    if (occs.length) return occs.map((oc) => ({ m, item, oc, i: { ...item, ...oc, status: "problema", fotos: occurrencePhotos(oc), fabricante: m.fabricante || e.fabricante || "" } }));
+    if (isProblem(item.status)) return [{ m, item, oc: null, i: { ...item, fotos: occurrencePhotos(item), fabricante: m.fabricante || e.fabricante || "" } }];
+    return [];
+  }));
+}
+function estruturaProblemOccurrences(e) {
+  return (e.itensEstrutura || []).flatMap((it) => (it.ocorrencias || [])
+    .filter((oc) => ocorrenciaStatus(oc, it) === "problema")
+    .map((oc) => ({ it, oc })));
+}
+function estruturaMedicoesInformativas(e) {
+  return (e.itensEstrutura || []).flatMap((it) => it.tipo === "medicao" ? (it.ocorrencias || [])
+    .filter((oc) => ["ok", "naoaplica"].includes(ocorrenciaStatus(oc, it)))
+    .map((oc) => ({ it, oc })) : []);
+}
+function countPendingInspection(v) {
+  let montantes = 0, itens = 0, estruturaItens = 0;
+  (v.estruturas || []).forEach((e) => {
+    (e.montantes || []).forEach((m) => {
+      const p = (m.itens || []).filter((it) => montanteItemStatus(it) === "pendente").length;
+      if (p) { montantes++; itens += p; }
+    });
+    estruturaItens += (e.itensEstrutura || []).filter((it) => estruturaEstItemStatus(it) === "pendente").length;
+  });
+  return { montantes, itens, estruturaItens, total: itens + estruturaItens };
+}
 function resizeImage(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
-        const maxDim = 480;
+        // 1200 px preserva detalhe técnico suficiente para ampliar no relatório,
+        // ainda reduzindo bastante o peso em relação à foto original do celular.
+        const maxDim = 1200;
         let w = img.width, h = img.height;
         if (w > h && w > maxDim) { h = Math.round((h * maxDim) / w); w = maxDim; }
         else if (h >= w && h > maxDim) { w = Math.round((w * maxDim) / h); h = maxDim; }
         const canvas = document.createElement("canvas");
         canvas.width = w; canvas.height = h;
-        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", 0.55));
+        const ctx = canvas.getContext("2d", { alpha: false });
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", 0.72));
       };
       img.onerror = reject;
       img.src = e.target.result;
@@ -278,13 +394,22 @@ async function boot() {
   render();
   window.addEventListener("online", updateOfflineBanner);
   window.addEventListener("offline", updateOfflineBanner);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden" && state.draftVistoria) {
+      clearTimeout(state.saveTimer);
+      saveVistoriaObject(state.draftVistoria).catch(() => {});
+    }
+  });
+  window.addEventListener("pagehide", () => {
+    if (state.draftVistoria) { clearTimeout(state.saveTimer); saveVistoriaObject(state.draftVistoria).catch(() => {}); }
+  });
 }
 function updateOfflineBanner() {
   const b = document.getElementById("offline-banner");
   if (b) b.classList.toggle("show", !navigator.onLine);
 }
 async function persistVistoriaList() {
-  state.vistorias = (await idbGetAll("vistorias")).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  state.vistorias = (await idbGetAll("vistorias")).map(normalizeVistoria).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 function go(screen, vistoriaId = null, estruturaId = null, montanteId = null, estItemId = null, checklistItemId = null) {
   state.screen = screen; state.activeVistoriaId = vistoriaId; state.activeEstruturaId = estruturaId; state.activeMontanteId = montanteId; state.activeEstItemId = estItemId; state.activeChecklistItemId = checklistItemId;
@@ -499,62 +624,113 @@ function VistoriaRow(v, isDraft) {
 function newVistoriaSkeleton() {
   return { id: uid(), lojaCd: "", local: "", data: todayStr(), inspetor: "", createdAt: new Date().toISOString(), finalizada: false, estruturas: [] };
 }
-function newOcorrencia() {
-  return { id: uid(), montanteRef: "", descTxt: "", tipoTxt: "", localTxt: "", grauTxt: "", qtd: 1, correcao: "", obs: "", foto: null, valor: "" };
+function newOcorrencia(status = "problema") {
+  return { id: uid(), status, montanteRef: "", descTxt: "", tipoTxt: "", localTxt: "", grauTxt: "", corte: "", qtd: 1, correcao: "", obs: "", fotos: [], valor: "" };
 }
 function newEstruturaItemRuntime(base) {
   return { ...base, revisado: false, ocorrencias: [] };
 }
-function newEstruturaSkeleton() {
+function newEstruturaSkeleton(previous = null) {
   return {
-    id: uid(), codigo: "", setor: "", tipoEstrutura: "",
-    rua: "", lado: "", modulos: "", fabricante: "", resolvido: false,
-    montantes: [],
-    itensEstrutura: itensEstruturaCatalogo(state.config).map(newEstruturaItemRuntime),
+    id: uid(), codigo: "", setor: previous ? previous.setor || "" : "", tipoEstrutura: previous ? previous.tipoEstrutura || "" : "",
+    rua: previous ? previous.rua || "" : "", lado: previous ? previous.lado || "" : "", modulos: "",
+    fabricante: previous ? previous.fabricante || "" : "", observacoesGerais: "", finalizada: false, resolvido: false,
+    montantes: [], itensEstrutura: itensEstruturaCatalogo(state.config).map(newEstruturaItemRuntime),
   };
 }
-function newMontanteSkeleton(numero) {
-  return { id: uid(), numero, itens: itensMontante(state.config).map((it) => ({ ...it, status: "pendente", obs: "", foto: null, valor: "", corte: "", qtd: 1, correcao: "", descTxt: "", tipoTxt: "", localTxt: "", grauTxt: "" })) };
+function newMontanteSkeleton(numero, estrutura = null, previous = null) {
+  return {
+    id: uid(), numero,
+    fabricante: previous ? previous.fabricante || "" : (estrutura ? estrutura.fabricante || "" : ""),
+    tipoMontante: previous ? previous.tipoMontante || "" : "",
+    observacoes: "",
+    itens: itensMontante(state.config).map((it) => ({ ...it, status: "pendente", revisado: false, ocorrencias: [], valor: "", qtd: 1, correcao: "" }))
+  };
+}
+function addNextMontante(e) {
+  e.montantes = e.montantes || [];
+  const orderedExisting = e.montantes.slice().sort((a,b) => a.numero - b.numero);
+  const previous = orderedExisting.length ? orderedExisting[orderedExisting.length - 1] : null;
+  const numero = previous ? previous.numero + 1 : 1;
+  const m = newMontanteSkeleton(numero, e, previous);
+  e.montantes.push(m);
+  return m;
+}
+function completeMontanteAsInspected(m) {
+  (m.itens || []).forEach((it) => {
+    if (montanteItemStatus(it) !== "pendente") return;
+    if (it.id === "prumo") {
+      it.ocorrencias = [normalizeOccurrence({ ...newOcorrencia("ok"), descTxt: "COLUNA NA TOLERÂNCIA DO PRUMO", localTxt: "LONGITUDINAL / TRANSVERSAL", status: "ok" }, it, "ok")];
+    }
+    it.revisado = true;
+    it.status = "ok";
+    syncMontanteItemStatus(it);
+  });
+  m.inspecionadoAt = new Date().toISOString();
+}
+function montanteHasActivity(m) {
+  return Boolean((m.tipoMontante || "").trim() || (m.observacoes || "").trim() || (m.itens || []).some((it) => montanteItemStatus(it) !== "pendente" || (it.ocorrencias || []).length));
 }
 function syncMontantes(e) {
+  // Compatibilidade: a quantidade passou a ser apenas estimativa. Se o usuário optar por pré-gerar,
+  // esta função ainda cria montantes faltantes, mas nunca remove montantes já inspecionados.
   const target = parseInt(e.modulos, 10) || 0;
   e.montantes = e.montantes || [];
-  for (let n = e.montantes.length + 1; n <= target; n++) e.montantes.push(newMontanteSkeleton(n));
+  while (e.montantes.length < target) addNextMontante(e);
 }
 function estruturaEstItemStatus(it) {
-  if (it.ocorrencias && it.ocorrencias.length) return "problema";
+  const statuses = (it.ocorrencias || []).map((oc) => ocorrenciaStatus(oc, it));
+  if (statuses.includes("problema")) return "problema";
+  if (statuses.includes("pendente")) return "pendente";
+  if (statuses.length && statuses.every((x) => x === "ok" || x === "naoaplica")) return "ok";
   if (it.revisado) return "ok";
   return "pendente";
 }
 function estruturaItensFlat(e) {
-  const montanteItens = (e.montantes || []).flatMap((m) => m.itens.filter((it) => itemAplicavel(it, e)));
+  const montanteItens = (e.montantes || []).flatMap((m) => (m.itens || []).filter((it) => itemAplicavel(it, e)).map((it) => ({ status: montanteItemStatus(it) })));
   const estItens = (e.itensEstrutura || []).map((it) => ({ status: estruturaEstItemStatus(it) }));
   return montanteItens.concat(estItens);
 }
 function estruturaStatus(e) {
   const all = estruturaItensFlat(e);
-  return all.length ? overallStatus(all) : "ok";
+  return all.length ? overallStatus(all) : "pendente";
 }
 async function ensureVistoria(id) {
   if (id) {
     const existing = await idbGet("vistorias", id);
-    if (existing) { state.draftVistoria = existing; return; }
+    if (existing) { state.draftVistoria = normalizeVistoria(existing); return; }
   }
   if (state.draftVistoria && !state.draftVistoria.finalizada && !id) return;
   state.draftVistoria = newVistoriaSkeleton();
   await idbSet("vistorias", undefined, state.draftVistoria);
   await persistVistoriaList();
 }
-function saveVistoriaNow() {
-  return idbSet("vistorias", undefined, state.draftVistoria).then(persistVistoriaList).then(updateSaveIndicator);
+async function saveVistoriaObject(target) {
+  if (!target) return;
+  try {
+    normalizeVistoria(target);
+    await idbSet("vistorias", undefined, target);
+    await persistVistoriaList();
+    updateSaveIndicator();
+  } catch (err) {
+    showSaveError(err);
+    throw err;
+  }
 }
+function saveVistoriaNow() { return saveVistoriaObject(state.draftVistoria); }
 function saveVistoriaDebounced() {
   clearTimeout(state.saveTimer);
   showSaving();
-  state.saveTimer = setTimeout(saveVistoriaNow, 400);
+  const target = state.draftVistoria;
+  state.saveTimer = setTimeout(() => saveVistoriaObject(target).catch(() => {}), 400);
 }
-function showSaving() { const ind = document.getElementById("save-indicator"); if (ind) ind.textContent = "Salvando no aparelho…"; }
-function updateSaveIndicator() { const ind = document.getElementById("save-indicator"); if (ind) ind.textContent = "✓ Salvo no aparelho"; }
+function showSaving() { const ind = document.getElementById("save-indicator"); if (ind) { ind.textContent = "Salvando no aparelho…"; ind.classList.remove("save-error"); } }
+function updateSaveIndicator() { const ind = document.getElementById("save-indicator"); if (ind) { ind.textContent = "✓ Salvo no aparelho"; ind.classList.remove("save-error"); } }
+function showSaveError(err) {
+  const ind = document.getElementById("save-indicator");
+  if (ind) { ind.textContent = "⚠ Não foi possível salvar — verifique o armazenamento"; ind.classList.add("save-error"); }
+  console.error("Falha ao salvar inspeção", err);
+}
 
 function VistoriaScreen() {
   const wrap = el("div", { style: "padding-bottom:90px" });
@@ -598,8 +774,9 @@ function VistoriaScreen() {
   const addEstBtn = el("button", { class: "ghost-btn", style: "width:100%;padding:12px;display:flex;align-items:center;justify-content:center;gap:6px" },
     el("span", { html: svg("plus", 16) }), "Adicionar estrutura");
   addEstBtn.addEventListener("click", async () => {
-    const nova = newEstruturaSkeleton();
     v.estruturas = v.estruturas || [];
+    const previous = v.estruturas.length ? v.estruturas[v.estruturas.length - 1] : null;
+    const nova = newEstruturaSkeleton(previous);
     v.estruturas.push(nova);
     await saveVistoriaNow();
     go("estrutura", v.id, nova.id);
@@ -647,6 +824,10 @@ function submitVistoria(v, errBox) {
   if (!v.estruturas || !v.estruturas.length) return showErr("Adicione pelo menos uma estrutura antes de concluir.");
   const semCodigo = v.estruturas.find((e) => !e.codigo || !e.codigo.trim());
   if (semCodigo) return showErr("Toda estrutura precisa de um código — falta preencher pelo menos uma.");
+  const semMontante = v.estruturas.find((e) => !(e.montantes || []).length);
+  if (semMontante) return showErr(`A estrutura ${semMontante.codigo || "sem código"} ainda não possui montantes inspecionados.`);
+  const pending = countPendingInspection(v);
+  if (pending.total) return showErr(`Ainda há ${pending.total} item(ns) pendente(s): ${pending.itens} em ${pending.montantes} montante(s) e ${pending.estruturaItens} item(ns) de estrutura. Revise-os antes de concluir.`);
   v.finalizada = true;
   v.finalizadaAt = new Date().toISOString();
   idbSet("vistorias", undefined, v).then(async () => {
@@ -659,7 +840,7 @@ function submitVistoria(v, errBox) {
 
 /* ---------------- Estrutura (checklist 9.x) ---------------- */
 function EstruturaScreen() {
-  const wrap = el("div", { style: "padding-bottom:90px" });
+  const wrap = el("div", { style: "padding-bottom:96px" });
   const inner = el("div", { class: "screen", style: "padding-top:16px" });
   wrap.appendChild(inner);
 
@@ -668,146 +849,98 @@ function EstruturaScreen() {
   const e = (v.estruturas || []).find((x) => x.id === state.activeEstruturaId);
   if (!e) { inner.appendChild(el("div", { class: "empty" }, "Estrutura não encontrada.")); return wrap; }
 
-  const header = Card({ style: "margin-bottom:14px" });
-  header.appendChild(Field("Código da estrutura", inputEl(e.codigo, (val) => { e.codigo = val; saveVistoriaDebounced(); }, "Digite a identificação da estrutura")));
+  const header = Card({ class: "structure-header", style: "margin-bottom:14px" });
+  header.appendChild(Field("Código da estrutura", inputEl(e.codigo, (val) => { e.codigo = val; saveVistoriaDebounced(); }, "Ex: E-01 / Rua 03")));
   header.appendChild(el("div", { class: "row2" },
-    (() => {
-      const fieldWrap = el("div", { class: "field" }, el("label", {}, "Setor"));
-      const frag = suggestInput(e.setor, (val) => { e.setor = val; saveVistoriaDebounced(); }, "Digite o setor", state.config.setores);
-      const input = frag.querySelector("input");
-      input.addEventListener("blur", () => {
-        const val = input.value.trim();
-        if (val && !state.config.setores.includes(val)) { state.config.setores.push(val); idbSet("config", "main", state.config); }
-      });
-      fieldWrap.appendChild(frag);
-      return fieldWrap;
-    })(),
-    (() => {
-      const fieldWrap = el("div", { class: "field" }, el("label", {}, "Tipo de estrutura"));
-      const frag = suggestInput(e.tipoEstrutura, (val) => { e.tipoEstrutura = val; saveVistoriaDebounced(); }, "Digite o tipo", state.config.tiposEstrutura);
-      const input = frag.querySelector("input");
-      input.addEventListener("blur", () => {
-        const val = input.value.trim();
-        if (val && !state.config.tiposEstrutura.includes(val)) { state.config.tiposEstrutura.push(val); idbSet("config", "main", state.config); }
-      });
-      fieldWrap.appendChild(frag);
-      return fieldWrap;
-    })()));
+    (() => { const fw=el("div",{class:"field"},el("label",{},"Setor")); const frag=suggestInput(e.setor,(val)=>{e.setor=val;saveVistoriaDebounced();},"Digite o setor",state.config.setores); fw.appendChild(frag); return fw; })(),
+    (() => { const fw=el("div",{class:"field"},el("label",{},"Tipo de estrutura")); const frag=suggestInput(e.tipoEstrutura,(val)=>{e.tipoEstrutura=val;saveVistoriaDebounced();},"Digite o tipo",state.config.tiposEstrutura); fw.appendChild(frag); return fw; })()));
   header.appendChild(el("div", { class: "row2" },
     Field("Rua", inputEl(e.rua, (val) => { e.rua = val; saveVistoriaDebounced(); }, "Ex: 03")),
-    Field("Lado", inputEl(e.lado, (val) => { e.lado = val; saveVistoriaDebounced(); }, "Ex: ímpar"))));
+    Field("Lado", inputEl(e.lado, (val) => { e.lado = val; saveVistoriaDebounced(); }, "Ex: direito / ímpar"))));
   header.appendChild(el("div", { class: "row2" },
-    (() => {
-      const fieldWrap = el("div", { class: "field" }, el("label", {}, "Qtd. Montantes"));
-      const input = inputEl(e.modulos, (val) => { e.modulos = val; saveVistoriaDebounced(); }, "Ex: 32", "number");
-      input.addEventListener("blur", () => { syncMontantes(e); saveVistoriaNow().then(render); });
-      fieldWrap.appendChild(input);
-      return fieldWrap;
-    })(),
-    (() => {
-      const fieldWrap = el("div", { class: "field" }, el("label", {}, "Fabricante"));
-      const frag = suggestInput(e.fabricante, (val) => { e.fabricante = val; saveVistoriaDebounced(); }, "Digite o fabricante", state.config.fabricantes);
-      const input = frag.querySelector("input");
-      input.addEventListener("blur", () => {
-        const val = input.value.trim();
-        if (val && !state.config.fabricantes.includes(val)) { state.config.fabricantes.push(val); idbSet("config", "main", state.config); }
-      });
-      fieldWrap.appendChild(frag);
-      return fieldWrap;
-    })()));
+    (() => { const fw=el("div",{class:"field"},el("label",{},"Qtd. estimada (opcional)")); const inp=inputEl(e.qtdEstimada || "",(val)=>{e.qtdEstimada=val;saveVistoriaDebounced();},"Pode deixar em branco","number"); fw.appendChild(inp); return fw; })(),
+    (() => { const fw=el("div",{class:"field"},el("label",{},"Fabricante padrão")); const frag=suggestInput(e.fabricante,(val)=>{e.fabricante=val;saveVistoriaDebounced();},"Digite o fabricante",state.config.fabricantes); fw.appendChild(frag); return fw; })()));
+  const obs = el("textarea", { class: "input", rows: 3, placeholder: "Contexto geral da estrutura: altura, particularidades, interferências, adaptações..." });
+  obs.value = e.observacoesGerais || "";
+  obs.addEventListener("input", (ev) => { e.observacoesGerais = ev.target.value; saveVistoriaDebounced(); });
+  header.appendChild(el("div", { class: "field" }, el("label", {}, "Observações gerais da estrutura"), obs));
   header.appendChild(el("div", { id: "save-indicator", class: "save-indicator" }, "✓ Salvo no aparelho"));
   inner.appendChild(header);
+
+  const totalM = (e.montantes || []).length;
+  const totalAnom = montanteProblemEntries(e).length + estruturaProblemOccurrences(e).length;
+  const campo = Card({ class: "field-mode-card", style: "margin-bottom:14px" });
+  campo.appendChild(el("div", { class: "field-mode-kicker" }, "MODO CAMPO"));
+  campo.appendChild(el("div", { class: "field-mode-stats" },
+    el("div", {}, el("strong", {}, String(totalM)), el("span", {}, " montantes")),
+    el("div", {}, el("strong", {}, String(totalAnom)), el("span", {}, " anomalias"))));
+  const startBtn = el("button", { class: "field-primary-btn" }, totalM ? "▶ Continuar inspeção dos montantes" : "▶ Iniciar inspeção dos montantes");
+  startBtn.addEventListener("click", async () => {
+    let target = (e.montantes || []).slice().sort((a,b)=>a.numero-b.numero).find((m) => (m.itens || []).some((it) => montanteItemStatus(it) === "pendente"));
+    if (!target) { const ordered=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero); target = totalM ? ordered[ordered.length - 1] : addNextMontante(e); }
+    await saveVistoriaNow();
+    go("montante", v.id, e.id, target.id);
+  });
+  campo.appendChild(startBtn);
+  campo.appendChild(el("div", { class: "field-mode-hint" }, "O total não precisa ser conhecido antecipadamente. O próximo montante é criado conforme o técnico avança."));
+  inner.appendChild(campo);
 
   if ((e.itensEstrutura || []).length) {
     if (!(e.id in estItemsCollapseState)) estItemsCollapseState[e.id] = true;
     const collapsed = estItemsCollapseState[e.id];
-    const estHeader = el("div", { class: "card", style: "padding:12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px" },
-      el("div", { style: "font-weight:700;font-size:13.5px" }, "Itens da estrutura (avaliados uma vez)"),
-      el("span", { html: svg("chevronRight", 16, collapsed ? "" : "transform:rotate(90deg)"), style: "color:var(--ink-faint);flex-shrink:0" }));
+    const estOverall = overallStatus(e.itensEstrutura.map((it) => ({ status: estruturaEstItemStatus(it) })));
+    const estHeader = el("div", { class: "card section-toggle" },
+      el("div", {}, el("div", { style: "font-weight:700;font-size:13.5px" }, "Itens da estrutura"), el("div", { class: "insp-sub" }, "Avaliados uma vez por estrutura")),
+      el("div", { style: "display:flex;align-items:center;gap:8px" }, Tag(estOverall, "sm"), el("span", { html: svg("chevronRight", 16, collapsed ? "" : "transform:rotate(90deg)") })));
     estHeader.addEventListener("click", () => { estItemsCollapseState[e.id] = !estItemsCollapseState[e.id]; render(); });
     inner.appendChild(estHeader);
-
     if (!collapsed) {
-      const estList = el("div", { style: "display:flex;flex-direction:column;gap:8px;margin-bottom:18px" });
+      const estList = el("div", { style: "display:flex;flex-direction:column;gap:8px;margin:8px 0 18px" });
       e.itensEstrutura.forEach((it) => estList.appendChild(EstruturaItemRow(it, e, v)));
       inner.appendChild(estList);
     }
   }
 
-  const montHead = el("div", { style: "display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px" },
-    el("h3", { class: "section-title", style: "margin:0" }, `Montantes (${(e.montantes || []).length})`));
+  const montHead = el("div", { style: "display:flex;align-items:baseline;justify-content:space-between;margin:14px 0 10px" },
+    el("h3", { class: "section-title", style: "margin:0" }, `Montantes inspecionados (${totalM})`));
   inner.appendChild(montHead);
-
-  const totalM = (e.montantes || []).length;
-
-  const target = parseInt(e.modulos, 10) || 0;
-  if (target > (e.montantes || []).length) {
-    const syncBar = el("div", { style: "display:flex;align-items:center;justify-content:space-between;background:var(--amber-bg);color:var(--amber-dark);padding:8px 12px;border-radius:8px;font-size:12.5px;margin-bottom:10px" },
-      el("span", {}, `Faltam ${target - (e.montantes || []).length} montante(s) para bater com a Qtd. Montantes.`));
-    const syncBtn = el("button", { class: "ghost-btn", style: "background:#fff" }, "Gerar agora");
-    syncBtn.addEventListener("click", async () => { syncMontantes(e); await saveVistoriaNow(); render(); });
-    syncBar.appendChild(syncBtn);
-    inner.appendChild(syncBar);
-  }
 
   if (totalM) {
     const jumpRow = el("div", { class: "row", style: "margin-bottom:10px" });
-    const jumpInput = el("input", { class: "input", type: "number", placeholder: "Ir para o Nº..." });
-    const jumpBtn = el("button", { class: "ghost-btn" }, "Ir");
-    const doJump = () => {
-      const n = parseInt(jumpInput.value, 10);
-      const alvo = (e.montantes || []).find((m) => m.numero === n);
-      if (alvo) go("montante", v.id, e.id, alvo.id);
-      else alert("Montante Nº " + n + " não encontrado nesta estrutura.");
-    };
-    jumpBtn.addEventListener("click", doJump);
-    jumpInput.addEventListener("keydown", (ev) => { if (ev.key === "Enter") doJump(); });
-    jumpRow.appendChild(jumpInput); jumpRow.appendChild(jumpBtn);
-    inner.appendChild(jumpRow);
+    const jumpInput = el("input", { class: "input", type: "number", inputmode: "numeric", placeholder: "Ir para o Nº..." });
+    const jumpBtn = el("button", { class: "ghost-btn touch-btn" }, "Ir");
+    const doJump = () => { const n=parseInt(jumpInput.value,10); const alvo=(e.montantes||[]).find((m)=>m.numero===n); if(alvo) go("montante",v.id,e.id,alvo.id); else alert("Montante Nº "+n+" não encontrado nesta estrutura."); };
+    jumpBtn.addEventListener("click",doJump); jumpInput.addEventListener("keydown",(ev)=>{if(ev.key==="Enter")doJump();}); jumpRow.appendChild(jumpInput);jumpRow.appendChild(jumpBtn);inner.appendChild(jumpRow);
 
-    let filtro = "todos";
-    let visivel = 100;
-    const filterRow = el("div", { class: "chip-row" });
-    const montList = el("div", { style: "display:flex;flex-direction:column;gap:8px" });
-    const loadMoreWrap = el("div", { style: "margin-top:10px" });
-    const filtros = [["todos", "Todos"], ["pendente", "Pendentes"], ["problema", "Com anomalia"], ["ok", "Conforme"]];
-
-    function passaFiltro(m) {
-      const itensAplic = m.itens.filter((it) => itemAplicavel(it, e));
-      if (filtro === "todos") return true;
-      if (filtro === "pendente") return itensAplic.some((i) => i.status === "pendente");
-      if (filtro === "problema") return itensAplic.some((i) => isProblem(i.status));
-      if (filtro === "ok") return itensAplic.length > 0 && itensAplic.every((i) => i.status === "ok" || i.status === "naoaplica");
-      return true;
-    }
-    function refreshList() {
-      filterRow.innerHTML = "";
-      filtros.forEach(([key, label]) => {
-        const chip = el("button", { class: "chip" + (filtro === key ? " active" : "") }, label);
-        chip.addEventListener("click", () => { filtro = key; visivel = 100; refreshList(); });
-        filterRow.appendChild(chip);
-      });
-      const filtrados = (e.montantes || []).filter(passaFiltro);
-      montList.innerHTML = "";
-      filtrados.slice(0, visivel).forEach((m) => montList.appendChild(MontanteRow(m, e, v)));
-      loadMoreWrap.innerHTML = "";
-      if (filtrados.length > visivel) {
-        const moreBtn = el("button", { class: "ghost-btn", style: "width:100%;padding:12px" }, `Carregar mais (${Math.min(visivel, filtrados.length)} de ${filtrados.length})`);
-        moreBtn.addEventListener("click", () => { visivel += 100; refreshList(); });
-        loadMoreWrap.appendChild(moreBtn);
-      }
-      if (!filtrados.length) montList.appendChild(el("div", { class: "card empty" }, "Nenhum montante nesse filtro."));
-    }
-    refreshList();
-    inner.appendChild(filterRow);
-    inner.appendChild(montList);
-    inner.appendChild(loadMoreWrap);
+    let filtro="todos", visivel=100;
+    const filterRow=el("div",{class:"chip-row"}); const montList=el("div",{style:"display:flex;flex-direction:column;gap:8px"}); const loadMoreWrap=el("div",{style:"margin-top:10px"});
+    const filtros=[["todos","Todos"],["pendente","Pendentes"],["problema","Com anomalia"],["ok","Conforme"]];
+    function passaFiltro(m){ const sts=(m.itens||[]).map(montanteItemStatus); if(filtro==="todos")return true; if(filtro==="pendente")return sts.includes("pendente"); if(filtro==="problema")return sts.includes("problema"); if(filtro==="ok")return sts.length&&sts.every((x)=>x==="ok"||x==="naoaplica"); return true; }
+    function refreshList(){ filterRow.innerHTML=""; filtros.forEach(([key,label])=>{const chip=el("button",{class:"chip"+(filtro===key?" active":"")},label);chip.addEventListener("click",()=>{filtro=key;visivel=100;refreshList();});filterRow.appendChild(chip);}); const filtrados=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero).filter(passaFiltro); montList.innerHTML=""; filtrados.slice(0,visivel).forEach((m)=>montList.appendChild(MontanteRow(m,e,v))); loadMoreWrap.innerHTML=""; if(filtrados.length>visivel){const more=el("button",{class:"ghost-btn touch-btn",style:"width:100%"},`Carregar mais (${Math.min(visivel,filtrados.length)} de ${filtrados.length})`);more.addEventListener("click",()=>{visivel+=100;refreshList();});loadMoreWrap.appendChild(more);} if(!filtrados.length)montList.appendChild(el("div",{class:"card empty"},"Nenhum montante nesse filtro.")); }
+    refreshList(); inner.appendChild(filterRow); inner.appendChild(montList); inner.appendChild(loadMoreWrap);
   } else {
-    inner.appendChild(el("div", { class: "card empty" }, "Informe a Qtd. Montantes acima para gerar os montantes automaticamente."));
+    inner.appendChild(el("div", { class: "card empty" }, "Nenhum montante ainda. Use “Iniciar inspeção dos montantes”."));
   }
 
-  const submitWrap = el("div", { class: "sticky-submit no-print" },
-    el("button", { class: "submit-btn" }, "Voltar para a inspeção"));
+  if (totalM) {
+    const finish = el("button", { class: "ghost-btn touch-btn", style: "width:100%;margin-top:14px" }, e.finalizada ? "✓ Estrutura finalizada — reabrir" : "Finalizar esta estrutura");
+    finish.addEventListener("click", async () => {
+      if (!e.finalizada) {
+        const p = estruturaItensFlat(e).filter((x)=>x.status==="pendente").length;
+        if (p) { alert(`Ainda há ${p} item(ns) pendente(s) nesta estrutura. Revise antes de finalizar.`); return; }
+        e.finalizada = true; e.finalizadaAt = new Date().toISOString();
+      } else { e.finalizada = false; delete e.finalizadaAt; }
+      await saveVistoriaNow(); render();
+    });
+    inner.appendChild(finish);
+    if (!e.finalizada) {
+      const finishNext=el("button",{class:"field-primary-btn",style:"margin-top:8px"},"✓ Finalizar estrutura e criar próxima");
+      finishNext.addEventListener("click",async()=>{const p=estruturaItensFlat(e).filter((x)=>x.status==="pendente").length;if(p){alert(`Ainda há ${p} item(ns) pendente(s) nesta estrutura. Revise antes de finalizar.`);return;}e.finalizada=true;e.finalizadaAt=new Date().toISOString();const nova=newEstruturaSkeleton(e);v.estruturas.push(nova);await saveVistoriaNow();go("estrutura",v.id,nova.id);});
+      inner.appendChild(finishNext);
+    }
+  }
+
+  const submitWrap = el("div", { class: "sticky-submit no-print" }, el("button", { class: "submit-btn" }, "Voltar para a inspeção"));
   submitWrap.querySelector("button").addEventListener("click", async () => { clearTimeout(state.saveTimer); await saveVistoriaNow(); go("vistoria", v.id); });
   wrap.appendChild(submitWrap);
   return wrap;
@@ -827,27 +960,28 @@ function EstruturaItemScreen() {
   const v = state.draftVistoria;
   if (!v) { wrap.appendChild(el("div", { class: "empty" }, "Carregando…")); return wrap; }
   const e = (v.estruturas || []).find((x) => x.id === state.activeEstruturaId);
-  if (!e) { wrap.appendChild(el("div", { class: "empty" }, "Estrutura não encontrada.")); return wrap; }
-  const it = (e.itensEstrutura || []).find((x) => x.id === state.activeEstItemId);
-  if (!it) { wrap.appendChild(el("div", { class: "empty" }, "Item não encontrado.")); return wrap; }
+  const it = e && (e.itensEstrutura || []).find((x) => x.id === state.activeEstItemId);
+  if (!e || !it) { wrap.appendChild(el("div", { class: "empty" }, "Item não encontrado.")); return wrap; }
 
-  wrap.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-faint);margin-bottom:10px" }, `Estrutura ${e.codigo || "—"}`));
+  wrap.appendChild(el("div", { class: "field-context" }, `Estrutura ${e.codigo || "—"}`));
+  wrap.appendChild(el("div", { class: "item-title-large" }, CodeBadge(it.codigo), it.nome));
   wrap.appendChild(el("div", { id: "save-indicator", class: "save-indicator", style: "margin-bottom:14px" }, "✓ Salvo no aparelho"));
 
-  if (!it.ocorrencias.length) {
-    const okBtn = el("button", { class: "submit-btn", style: "width:100%;margin-bottom:14px" }, "✓ Conforme (nenhuma ocorrência)");
+  if (it.tipo !== "medicao" && !(it.ocorrencias || []).length) {
+    const okBtn = el("button", { class: "field-ok-btn", style: "width:100%;margin-bottom:14px" }, "✓ Conforme — sem ocorrência");
     okBtn.addEventListener("click", async () => { it.revisado = true; await saveVistoriaNow(); go("estrutura", v.id, e.id); });
     wrap.appendChild(okBtn);
   }
 
   const list = el("div", { style: "display:flex;flex-direction:column;gap:10px;margin-bottom:14px" });
-  it.ocorrencias.forEach((oc, idx) => list.appendChild(OcorrenciaCard(oc, idx, it)));
+  (it.ocorrencias || []).forEach((oc, idx) => list.appendChild(OcorrenciaCard(oc, idx, it)));
   wrap.appendChild(list);
 
-  const addBtn = el("button", { class: "ghost-btn", style: "width:100%;padding:12px;display:flex;align-items:center;justify-content:center;gap:6px" },
-    el("span", { html: svg("plus", 16) }), "Adicionar ocorrência");
-  addBtn.addEventListener("click", async () => { it.ocorrencias.push(newOcorrencia()); await saveVistoriaNow(); render(); });
+  const addBtn = el("button", { class: "ghost-btn touch-btn", style: "width:100%;display:flex;align-items:center;justify-content:center;gap:6px" }, el("span", { html: svg("plus", 16) }), it.tipo === "medicao" ? "Adicionar aferição" : "Adicionar ocorrência");
+  addBtn.addEventListener("click", async () => { it.ocorrencias = it.ocorrencias || []; it.ocorrencias.push(newOcorrencia(it.tipo === "medicao" ? "pendente" : "problema")); await saveVistoriaNow(); render(); });
   wrap.appendChild(addBtn);
+
+  if (it.tipo === "medicao" && !(it.ocorrencias || []).length) wrap.appendChild(el("div", { class: "field-mode-hint", style: "margin-top:8px" }, "Registre pelo menos uma aferição. O status será calculado automaticamente pelo limite configurado."));
 
   const backBtn = el("button", { class: "submit-btn", style: "width:100%;margin-top:16px" }, "Voltar para a estrutura");
   backBtn.addEventListener("click", async () => { await saveVistoriaNow(); go("estrutura", v.id, e.id); });
@@ -855,57 +989,44 @@ function EstruturaItemScreen() {
   return wrap;
 }
 function OcorrenciaCard(oc, idx, it) {
-  const card = Card({ style: "padding:12px" });
-  card.appendChild(el("div", { style: "display:flex;justify-content:space-between;align-items:center;margin-bottom:8px" },
-    el("div", { style: "font-weight:700;font-size:13px" }, "Ocorrência " + (idx + 1)),
-    (() => { const b = el("button", { style: "background:none;border:none;color:var(--ink-faint)", html: svg("trash", 15) }); b.addEventListener("click", async () => { if (confirm("Remover esta ocorrência?")) { it.ocorrencias.splice(idx, 1); await saveVistoriaNow(); render(); } }); return b; })()));
-
-  card.appendChild(Field("Montante(s) de referência", inputEl(oc.montanteRef, (val) => { oc.montanteRef = val; saveVistoriaDebounced(); }, "Ex: Montante 5, ou 12 e 27")));
-
+  normalizeOccurrence(oc, it, it.tipo === "medicao" ? "pendente" : "problema");
+  const card = Card({ class: "occurrence-card", style: "padding:12px" });
+  const st = ocorrenciaStatus(oc, it);
+  card.appendChild(el("div", { class: "occurrence-head" },
+    el("div", {}, el("div", { style: "font-weight:700;font-size:13px" }, it.tipo === "medicao" ? `Aferição ${idx + 1}` : `Ocorrência ${idx + 1}`), Tag(st, "sm")),
+    (() => { const b=el("button",{class:"icon-btn",html:svg("trash",15)}); b.addEventListener("click",async()=>{if(confirm("Remover este registro?")){it.ocorrencias.splice(idx,1);await saveVistoriaNow();render();}});return b; })()));
+  card.appendChild(Field("Montante / posição de referência", inputEl(oc.montanteRef, (val) => { oc.montanteRef = val; saveVistoriaDebounced(); }, "Ex: Montante 5")));
   if (it.tipo === "medicao") {
-    card.appendChild(Field(`Valor medido (${it.unidade})`, inputEl(oc.valor, (val) => { oc.valor = val; saveVistoriaDebounced(); }, `Mínimo ${it.min}`, "number")));
+    const inp=inputEl(oc.valor,(val)=>{oc.valor=val;oc.status=statusFromMedicao(val,it.min);saveVistoriaDebounced();},`Mínimo ${it.min}`,"number");
+    card.appendChild(Field(`Valor medido (${it.unidade})`, inp));
+    card.appendChild(el("div",{class:"measurement-hint"},oc.valor ? (statusFromMedicao(oc.valor,it.min)==="ok" ? `✓ Dentro do limite (≥ ${it.min} ${it.unidade})` : `⚠ Abaixo do limite (${it.min} ${it.unidade})`) : `Limite mínimo: ${it.min} ${it.unidade}`));
   }
-  if (it.descOpcoes) card.appendChild(Field("Descrição", suggestInput(oc.descTxt, (val) => { oc.descTxt = val; saveVistoriaDebounced(); }, "Digite a descrição", it.descOpcoes)));
+  if (it.descOpcoes) card.appendChild(Field("Descrição", suggestInput(oc.descTxt, (val) => { oc.descTxt = val; oc.status = ocorrenciaStatus(oc,it); saveVistoriaDebounced(); }, "Digite a descrição", it.descOpcoes)));
   if (it.tipoOpcoes) card.appendChild(Field("Tipo", suggestInput(oc.tipoTxt, (val) => { oc.tipoTxt = val; saveVistoriaDebounced(); }, "Digite o tipo/componente", it.tipoOpcoes)));
   if (it.localOpcoes) card.appendChild(Field(it.localLabel || "Localização", suggestInput(oc.localTxt, (val) => { oc.localTxt = val; saveVistoriaDebounced(); }, "Digite a localização", it.localOpcoes)));
-  card.appendChild(Field("Grau", suggestInput(oc.grauTxt, (val) => { oc.grauTxt = val; saveVistoriaDebounced(); }, "Leve, Médio, Grave, Gravíssimo", GRAU_OPCOES)));
+  if (it.tipo !== "medicao") card.appendChild(Field("Grau", suggestInput(oc.grauTxt, (val) => { oc.grauTxt = val; saveVistoriaDebounced(); }, "Leve, Médio, Grave, Gravíssimo", GRAU_OPCOES)));
   card.appendChild(Field("Quantidade", inputEl(oc.qtd == null ? 1 : oc.qtd, (val) => { oc.qtd = val; saveVistoriaDebounced(); }, "1", "number")));
-
-  const obsBox = el("textarea", { class: "input", rows: 2, placeholder: "Observação (opcional)", style: "resize:vertical" });
-  obsBox.value = oc.obs || "";
-  obsBox.addEventListener("input", (ev) => { oc.obs = ev.target.value; saveVistoriaDebounced(); });
-  card.appendChild(el("div", { class: "field" }, el("label", {}, "Observações"), obsBox));
-
-  const photoWrap = el("div", { style: "margin-top:4px" });
-  renderPhotoArea(photoWrap, oc);
-  card.appendChild(photoWrap);
+  const obsBox=el("textarea",{class:"input",rows:2,placeholder:"Observação (opcional)"}); obsBox.value=oc.obs||""; obsBox.addEventListener("input",(ev)=>{oc.obs=ev.target.value;saveVistoriaDebounced();}); card.appendChild(el("div",{class:"field"},el("label",{},"Observações"),obsBox));
+  const photoWrap=el("div",{style:"margin-top:4px"}); renderPhotoArea(photoWrap,oc); card.appendChild(photoWrap);
   return card;
 }
-
 function MontanteRow(m, e, v) {
-  const itensAplic = m.itens.filter((it) => itemAplicavel(it, e));
-  const st = overallStatus(itensAplic);
-  const apontamentos = itensAplic.filter((i) => isProblem(i.status)).length;
-  const naoInspecionados = itensAplic.filter((i) => i.status === "pendente").length;
-  let sub = "Conforme";
-  if (apontamentos) sub = apontamentos + " com apontamento";
-  else if (naoInspecionados) sub = naoInspecionados + " item(ns) ainda não inspecionado(s)";
-  const row = el("div", { class: "insp-row", onclick: () => go("montante", v.id, e.id, m.id) },
-    el("div", {},
-      el("div", { class: "insp-code" }, "Montante Nº " + m.numero),
-      el("div", { class: "insp-sub" }, sub)),
-    Tag(st, "sm"));
-  return Card({ style: "padding:0;cursor:pointer" }, row);
+  const sts=(m.itens||[]).map(montanteItemStatus);
+  const st=overallStatus(sts.map((status)=>({status})));
+  const nAnom=montanteProblemEntries({ ...e, montantes:[m] }).length;
+  const row=el("div",{class:"insp-row",onclick:()=>go("montante",v.id,e.id,m.id)},
+    el("div",{},el("div",{class:"insp-code"},`Montante Nº ${m.numero}`),el("div",{class:"insp-sub"},[m.tipoMontante,m.fabricante,nAnom?`${nAnom} anomalia(s)`:""].filter(Boolean).join(" · "))),
+    el("div",{style:"display:flex;align-items:center;gap:8px"},Tag(st,"sm"),el("span",{html:svg("chevronRight",16),style:"color:var(--ink-faint)"})));
+  return Card({style:"padding:0;cursor:pointer"},row);
 }
-
-/* ---------------- Montante (checklist 9.x) ---------------- */
 const familyCollapseState = {};
 const estItemsCollapseState = {};
+const fieldChecklistCollapseState = {};
 function FamilySection(familia, itensFamilia, e, m) {
   if (!(familia in familyCollapseState)) familyCollapseState[familia] = true;
-  const st = overallStatus(itensFamilia);
-  const pendentes = itensFamilia.filter((i) => i.status === "pendente").length;
-  const apontamentos = itensFamilia.filter((i) => isProblem(i.status)).length;
+  const st = overallStatus(itensFamilia.map((i) => ({ status: montanteItemStatus(i) })));
+  const pendentes = itensFamilia.filter((i) => montanteItemStatus(i) === "pendente").length;
+  const apontamentos = itensFamilia.filter((i) => montanteItemStatus(i) === "problema").length;
 
   const section = el("div", { style: "margin-bottom:12px" });
   const header = el("div", { class: "card", style: "padding:12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px" });
@@ -920,7 +1041,11 @@ function FamilySection(familia, itensFamilia, e, m) {
     const btnFam = el("button", { class: "ghost-btn", style: "width:100%;padding:9px;margin-bottom:8px" }, "✓ Marcar família conforme");
     btnFam.addEventListener("click", async (ev) => {
       ev.stopPropagation();
-      itensFamilia.forEach((it) => { it.status = "ok"; it.obs = ""; it.descTxt = ""; it.tipoTxt = ""; it.localTxt = ""; it.grauTxt = ""; it.foto = null; it.uiCollapsed = false; });
+      itensFamilia.forEach((it) => {
+        if (montanteItemStatus(it) !== "pendente") return;
+        if (it.id === "prumo") it.ocorrencias = [normalizeOccurrence({ ...newOcorrencia("ok"), descTxt: "COLUNA NA TOLERÂNCIA DO PRUMO", localTxt: "LONGITUDINAL / TRANSVERSAL", status: "ok" }, it, "ok")];
+        it.revisado = true; it.status = "ok"; syncMontanteItemStatus(it);
+      });
       await saveVistoriaNow();
       render();
     });
@@ -935,99 +1060,76 @@ function FamilySection(familia, itensFamilia, e, m) {
 function ChecklistItemRow(item, e, m) {
   const row = el("div", { class: "insp-row", onclick: () => go("itemDetail", state.draftVistoria.id, e.id, m.id, null, item.id) },
     el("div", {}, el("div", { class: "insp-code" }, CodeBadge(item.codigo), item.nome)),
-    el("div", { style: "display:flex;align-items:center;gap:8px" }, Tag(item.status, "sm"), el("span", { html: svg("chevronRight", 16), style: "color:var(--ink-faint)" })));
+    el("div", { style: "display:flex;align-items:center;gap:8px" }, Tag(montanteItemStatus(item), "sm"), el("span", { html: svg("chevronRight", 16), style: "color:var(--ink-faint)" })));
   return Card({ style: "padding:0;margin-bottom:8px;cursor:pointer" }, row);
 }
 
 function MontanteScreen() {
-  const wrap = el("div", { style: "padding-bottom:90px" });
-  const inner = el("div", { class: "screen", style: "padding-top:16px" });
-  wrap.appendChild(inner);
+  const wrap = el("div", { class: "field-screen", style: "padding-bottom:118px" });
+  const inner = el("div", { class: "screen", style: "padding-top:12px" }); wrap.appendChild(inner);
+  const v=state.draftVistoria; const e=v&&(v.estruturas||[]).find((x)=>x.id===state.activeEstruturaId); const m=e&&(e.montantes||[]).find((x)=>x.id===state.activeMontanteId);
+  if(!v||!e||!m){inner.appendChild(el("div",{class:"empty"},"Montante não encontrado."));return wrap;}
+  (m.itens||[]).forEach(normalizeMontanteItem);
+  const anom=montanteProblemEntries({...e,montantes:[m]}).length;
+  const pend=(m.itens||[]).filter((it)=>montanteItemStatus(it)==="pendente").length;
 
-  const v = state.draftVistoria;
-  if (!v) { inner.appendChild(el("div", { class: "empty" }, "Carregando…")); return wrap; }
-  const e = (v.estruturas || []).find((x) => x.id === state.activeEstruturaId);
-  if (!e) { inner.appendChild(el("div", { class: "empty" }, "Estrutura não encontrada.")); return wrap; }
-  const m = (e.montantes || []).find((x) => x.id === state.activeMontanteId);
-  if (!m) { inner.appendChild(el("div", { class: "empty" }, "Montante não encontrado.")); return wrap; }
+  const hero=Card({class:"montante-hero"});
+  hero.appendChild(el("div",{class:"montante-context"},`Estrutura ${e.codigo||"—"}${e.rua?" · Rua "+e.rua:""}${e.lado?" · "+e.lado:""}`));
+  hero.appendChild(el("div",{class:"montante-number"},"MONTANTE ",el("strong",{},String(m.numero).padStart(3,"0"))));
+  hero.appendChild(el("div",{class:"montante-meta"},el("span",{},`${anom} anomalia(s)`),el("span",{},`${pend} pendente(s)`),el("span",{id:"save-indicator",class:"save-indicator"},"✓ Salvo")));
+  inner.appendChild(hero);
 
-  inner.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-faint);margin-bottom:10px" }, `Estrutura ${e.codigo || "—"} · Montante Nº ${m.numero}`));
-  inner.appendChild(el("div", { id: "save-indicator", class: "save-indicator", style: "margin-bottom:10px" }, "✓ Salvo no aparelho"));
+  const context=Card({class:"context-card",style:"margin-top:10px"});
+  context.appendChild(el("div",{class:"row2"},
+    (()=>{const fw=el("div",{class:"field"},el("label",{},"Tipo / corte")); const frag=suggestInput(m.tipoMontante||"",(val)=>{m.tipoMontante=val;saveVistoriaDebounced();},"Ex: GÔNDOLA",["GÔNDOLA","CHÃO","LONGARINA MÓVEL","ÚLTIMO MONTANTE"]);fw.appendChild(frag);return fw;})(),
+    (()=>{const fw=el("div",{class:"field"},el("label",{},"Fabricante"));const frag=suggestInput(m.fabricante||e.fabricante||"",(val)=>{m.fabricante=val;saveVistoriaDebounced();},"Fabricante",state.config.fabricantes);fw.appendChild(frag);return fw;})()));
+  const obs=el("textarea",{class:"input",rows:2,placeholder:"Observação geral deste montante (opcional)"});obs.value=m.observacoes||"";obs.addEventListener("input",(ev)=>{m.observacoes=ev.target.value;saveVistoriaDebounced();});context.appendChild(el("div",{class:"field"},el("label",{},"Observações do montante"),obs));
+  inner.appendChild(context);
 
-  const quickRow = el("div", { class: "row", style: "margin-bottom:14px" });
-  const btnTudoConforme = el("button", { class: "ghost-btn", style: "flex:1;padding:10px" }, "✓ Marcar tudo conforme");
-  btnTudoConforme.addEventListener("click", async () => {
-    m.itens.forEach((it) => { it.status = "ok"; it.obs = ""; it.descTxt = ""; it.tipoTxt = ""; it.localTxt = ""; it.grauTxt = ""; it.foto = null; it.uiCollapsed = false; });
-    await saveVistoriaNow();
-    render();
-  });
-  const btnReplicar = el("button", { class: "ghost-btn", style: "flex:1;padding:10px" }, "⧉ Replicar p/ pendentes");
-  btnReplicar.addEventListener("click", async () => {
-    const alvos = (e.montantes || []).filter((x) => x.id !== m.id && x.itens.every((i) => i.status === "pendente"));
-    if (!alvos.length) { alert("Não há montantes pendentes (ainda não tocados) nesta estrutura para replicar."); return; }
-    if (!confirm(`Isso vai copiar o resultado do Montante Nº ${m.numero} para ${alvos.length} montante(s) ainda pendente(s) nesta estrutura (fotos não são copiadas). Continuar?`)) return;
-    alvos.forEach((x) => { x.itens = m.itens.map((it) => ({ ...JSON.parse(JSON.stringify(it)), foto: null })); });
-    await saveVistoriaNow();
-    go("estrutura", v.id, e.id);
-  });
-  quickRow.appendChild(btnTudoConforme); quickRow.appendChild(btnReplicar);
-  inner.appendChild(quickRow);
+  const quick=el("div",{class:"quick-action-grid"});
+  const btnAnom=el("button",{class:"quick-anomaly-btn"},el("span",{html:svg("alert",20)}),el("span",{},"Registrar anomalia"));
+  const btnChecklist=el("button",{class:"quick-secondary-btn"},el("span",{html:svg("search",19)}),el("span",{},"Checklist / buscar"));
+  quick.appendChild(btnAnom);quick.appendChild(btnChecklist);inner.appendChild(quick);
 
-  const ordenadosParaCopia = (e.montantes || []).slice().sort((a, b) => a.numero - b.numero);
-  const idxAtual = ordenadosParaCopia.findIndex((x) => x.id === m.id);
-  const proximoParaCopia = ordenadosParaCopia[idxAtual + 1];
-  const copyRow = el("div", { style: "margin-bottom:14px" });
-  const btnCopiarProximo = el("button", { class: "ghost-btn", style: "width:100%;padding:10px" }, "→ Copiar pro próximo montante");
-  if (!proximoParaCopia) { btnCopiarProximo.disabled = true; btnCopiarProximo.style.opacity = "0.4"; }
-  btnCopiarProximo.addEventListener("click", async () => {
-    if (!proximoParaCopia) return;
-    const jaTemDados = proximoParaCopia.itens.some((i) => i.status !== "pendente");
-    if (jaTemDados && !confirm(`O Montante Nº ${proximoParaCopia.numero} já tem dados preenchidos. Sobrescrever com o resultado deste montante (Nº ${m.numero})?`)) return;
-    proximoParaCopia.itens = m.itens.map((it) => ({ ...JSON.parse(JSON.stringify(it)), foto: null }));
-    await saveVistoriaNow();
-    go("montante", v.id, e.id, proximoParaCopia.id);
-  });
-  copyRow.appendChild(btnCopiarProximo);
-  inner.appendChild(copyRow);
+  const picker=Card({class:"anomaly-picker",style:"display:none;margin-top:10px"});
+  const pickerTitle=el("div",{class:"picker-title"},"Selecione o item encontrado"); picker.appendChild(pickerTitle);
+  const search=el("input",{class:"input",placeholder:"Buscar por código ou componente..."});picker.appendChild(search);
+  const results=el("div",{class:"picker-results"});picker.appendChild(results);
+  let pickerMode="anomaly";
+  const renderPicker=()=>{const q=(search.value||"").trim().toLowerCase();results.innerHTML="";(m.itens||[]).filter((it)=>!q||`${it.codigo} ${it.nome} ${it.familia}`.toLowerCase().includes(q)).slice(0,30).forEach((it)=>{const b=el("button",{class:"picker-item"},el("span",{},CodeBadge(it.codigo),it.nome),Tag(montanteItemStatus(it),"sm"));b.addEventListener("click",async()=>{if(pickerMode==="anomaly"&&it.id!=="prumo"){it.ocorrencias=it.ocorrencias||[];it.ocorrencias.push(newOcorrencia("problema"));it.status="problema";await saveVistoriaNow();}go("itemDetail",v.id,e.id,m.id,null,it.id);});results.appendChild(b);});};
+  search.addEventListener("input",renderPicker);renderPicker();inner.appendChild(picker);
+  const openPicker=(mode)=>{pickerMode=mode;pickerTitle.textContent=mode==="anomaly"?"Selecione o componente com anomalia":"Abrir item do checklist";picker.style.display="block";search.value="";renderPicker();setTimeout(()=>search.focus(),50);};
+  btnAnom.addEventListener("click",()=>openPicker("anomaly"));btnChecklist.addEventListener("click",()=>openPicker("detail"));
 
-  const itensAplicaveis = m.itens.filter((it) => itemAplicavel(it, e));
-  const pending = itensAplicaveis.filter((i) => isProblem(i.status)).length;
-  const headRow = el("div", { style: "display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px" },
-    el("h3", { class: "section-title", style: "margin:0" }, `Checklist (${itensAplicaveis.length} itens)`));
-  if (pending) headRow.appendChild(el("span", { style: "font-size:12px;color:var(--amber-dark);font-weight:600" }, pending + " com apontamento"));
-  inner.appendChild(headRow);
+  const prumo=(m.itens||[]).find((it)=>it.id==="prumo");
+  if(prumo){const ps=montanteItemStatus(prumo);const pc=Card({class:"prumo-card",style:"margin-top:10px"});pc.appendChild(el("div",{class:"prumo-head"},el("div",{},CodeBadge(prumo.codigo),"Prumo"),Tag(ps,"sm")));const pr=el("div",{class:"row",style:"margin-top:8px"});const ok=el("button",{class:"field-ok-btn",style:"flex:1"},"✓ L + T na tolerância");ok.addEventListener("click",async()=>{prumo.ocorrencias=[normalizeOccurrence({...newOcorrencia("ok"),descTxt:"COLUNA NA TOLERÂNCIA DO PRUMO",localTxt:"LONGITUDINAL / TRANSVERSAL",status:"ok"},prumo,"ok")];prumo.revisado=true;syncMontanteItemStatus(prumo);await saveVistoriaNow();render();});const det=el("button",{class:"ghost-btn touch-btn",style:"flex:1"},"Detalhar eixos");det.addEventListener("click",()=>go("itemDetail",v.id,e.id,m.id,null,prumo.id));pr.appendChild(ok);pr.appendChild(det);pc.appendChild(pr);inner.appendChild(pc);}
 
-  const list = el("div", {});
-  FAMILIAS_ORDEM.forEach((familia) => {
-    const itensFamilia = itensAplicaveis.filter((it) => it.familia === familia);
-    if (!itensFamilia.length) return;
-    list.appendChild(FamilySection(familia, itensFamilia, e, m));
-  });
-  inner.appendChild(list);
+  if (!(m.id in fieldChecklistCollapseState)) fieldChecklistCollapseState[m.id] = true;
+  const ckCollapsed=fieldChecklistCollapseState[m.id];
+  const familyWrap=el("div",{class:"full-checklist-wrap",style:"margin-top:14px"});
+  const ckStatus=overallStatus((m.itens||[]).map((it)=>({status:montanteItemStatus(it)})));
+  const ckHead=el("div",{class:"card section-toggle"},el("div",{},el("div",{style:"font-weight:700;font-size:13.5px"},"Checklist completo"),el("div",{class:"insp-sub"},`${(m.itens||[]).length} itens · abra somente quando precisar`)),el("div",{style:"display:flex;align-items:center;gap:8px"},Tag(ckStatus,"sm"),el("span",{html:svg("chevronRight",16,ckCollapsed?"":"transform:rotate(90deg)")})));
+  ckHead.addEventListener("click",()=>{fieldChecklistCollapseState[m.id]=!fieldChecklistCollapseState[m.id];render();});familyWrap.appendChild(ckHead);
+  if(!ckCollapsed)FAMILIAS_ORDEM.forEach((familia)=>{const itens=(m.itens||[]).filter((it)=>it.familia===familia&&itemAplicavel(it,e));if(itens.length)familyWrap.appendChild(FamilySection(familia,itens,e,m));});
+  inner.appendChild(familyWrap);
 
-  const ordenados = (e.montantes || []).slice().sort((a, b) => a.numero - b.numero);
-  const idx = ordenados.findIndex((x) => x.id === m.id);
-  const prevM = ordenados[idx - 1];
-  const nextM = ordenados[idx + 1];
-  const navRow = el("div", { class: "row no-print", style: "margin-top:14px" });
-  const btnPrev = el("button", { class: "ghost-btn", style: "flex:1;padding:12px" }, "◀ Anterior");
-  btnPrev.disabled = !prevM;
-  if (!prevM) btnPrev.style.opacity = "0.4";
-  btnPrev.addEventListener("click", async () => { clearTimeout(state.saveTimer); await saveVistoriaNow(); if (prevM) go("montante", v.id, e.id, prevM.id); });
-  const btnNext = el("button", { class: "ghost-btn", style: "flex:1;padding:12px" }, "Próximo ▶");
-  btnNext.disabled = !nextM;
-  if (!nextM) btnNext.style.opacity = "0.4";
-  btnNext.addEventListener("click", async () => { clearTimeout(state.saveTimer); await saveVistoriaNow(); if (nextM) go("montante", v.id, e.id, nextM.id); });
-  navRow.appendChild(btnPrev); navRow.appendChild(btnNext);
-  inner.appendChild(navRow);
+  const ord=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero); const idx=ord.findIndex((x)=>x.id===m.id); const prev=ord[idx-1]; const isLast = idx === ord.length - 1;
+  const nav=el("div",{class:"row",style:"margin-top:12px"});
+  const bprev=el("button",{class:"ghost-btn touch-btn",style:"flex:1"},"◀ Anterior"); bprev.disabled=!prev; if(!prev)bprev.style.opacity=".4"; bprev.addEventListener("click",async()=>{if(prev){await saveVistoriaNow();go("montante",v.id,e.id,prev.id);}}); nav.appendChild(bprev);
+  if (isLast) {
+    const bdel=el("button",{class:"ghost-btn touch-btn",style:"flex:1;color:var(--red-dark)"},"Excluir este montante");
+    bdel.addEventListener("click",async()=>{const msg=montanteHasActivity(m)?"Este montante possui dados. Excluir mesmo assim?":"Excluir este montante vazio?";if(!confirm(msg))return;e.montantes=e.montantes.filter((x)=>x.id!==m.id);await saveVistoriaNow();if(prev)go("montante",v.id,e.id,prev.id);else go("estrutura",v.id,e.id);}); nav.appendChild(bdel);
+  }
+  inner.appendChild(nav);
 
-  const submitWrap = el("div", { class: "sticky-submit no-print" },
-    el("button", { class: "submit-btn" }, "Voltar para a estrutura"));
-  submitWrap.querySelector("button").addEventListener("click", async () => { clearTimeout(state.saveTimer); await saveVistoriaNow(); go("estrutura", v.id, e.id); });
-  wrap.appendChild(submitWrap);
+  const sticky=el("div",{class:"field-sticky no-print"}); const actions=el("div",{class:"field-sticky-actions"});
+  const lastBtn=el("button",{class:"field-last-btn"},"Este é o último");
+  lastBtn.addEventListener("click",async()=>{completeMontanteAsInspected(m);e.ultimoMontante=m.numero;await saveVistoriaNow();go("estrutura",v.id,e.id);});
+  const nextBtn=el("button",{class:"field-next-btn",style:"width:100%"},anom?"✓ SALVAR E PRÓXIMO":"✓ CONFORME E PRÓXIMO");
+  nextBtn.addEventListener("click",async()=>{completeMontanteAsInspected(m);let next=ord[idx+1];if(!next)next=addNextMontante(e);await saveVistoriaNow();go("montante",v.id,e.id,next.id);});
+  actions.appendChild(lastBtn);actions.appendChild(nextBtn);sticky.appendChild(actions);sticky.appendChild(el("div",{class:"field-sticky-hint"},"Pendentes são confirmados como conformes; anomalias registradas são preservadas."));wrap.appendChild(sticky);
   return wrap;
 }
-
 function statusSelect(item) {
   const sel = el("select", { class: "status-select status-select-" + item.status });
   [["pendente", "Pendente"], ["ok", "Conforme"], ["problema", "Com anomalia"], ["naoaplica", "Não se aplica"]].forEach(([val, label]) => {
@@ -1046,73 +1148,45 @@ function statusSelect(item) {
   return sel;
 }
 function ItemDetailScreen() {
-  const wrap = el("div", { class: "screen", style: "padding-bottom:30px" });
-  const v = state.draftVistoria;
-  if (!v) { wrap.appendChild(el("div", { class: "empty" }, "Carregando…")); return wrap; }
-  const e = (v.estruturas || []).find((x) => x.id === state.activeEstruturaId);
-  if (!e) { wrap.appendChild(el("div", { class: "empty" }, "Estrutura não encontrada.")); return wrap; }
-  const m = (e.montantes || []).find((x) => x.id === state.activeMontanteId);
-  if (!m) { wrap.appendChild(el("div", { class: "empty" }, "Montante não encontrado.")); return wrap; }
-  const item = m.itens.find((x) => x.id === state.activeChecklistItemId);
-  if (!item) { wrap.appendChild(el("div", { class: "empty" }, "Item não encontrado.")); return wrap; }
+  const wrap=el("div",{class:"screen",style:"padding-bottom:30px"}); const v=state.draftVistoria; const e=v&&(v.estruturas||[]).find((x)=>x.id===state.activeEstruturaId); const m=e&&(e.montantes||[]).find((x)=>x.id===state.activeMontanteId); const item=m&&(m.itens||[]).find((x)=>x.id===state.activeChecklistItemId);
+  if(!v||!e||!m||!item){wrap.appendChild(el("div",{class:"empty"},"Item não encontrado."));return wrap;}
+  normalizeMontanteItem(item);
+  wrap.appendChild(el("div",{class:"field-context"},`Estrutura ${e.codigo||"—"} · Montante ${m.numero}`));
+  wrap.appendChild(el("div",{class:"item-title-large"},CodeBadge(item.codigo),item.nome));
+  wrap.appendChild(el("div",{style:"display:flex;align-items:center;justify-content:space-between;margin:8px 0 14px"},Tag(montanteItemStatus(item)),el("span",{id:"save-indicator",class:"save-indicator"},"✓ Salvo")));
 
-  wrap.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-faint);margin-bottom:4px" }, `Estrutura ${e.codigo || "—"} · Montante Nº ${m.numero}`));
-  wrap.appendChild(el("div", { class: "item-name", style: "font-size:16px;margin-bottom:14px" }, CodeBadge(item.codigo), item.nome));
+  const actions=el("div",{class:"item-action-grid"});
+  const ok=el("button",{class:"field-ok-btn"},"✓ Conforme");ok.addEventListener("click",async()=>{
+    item.ocorrencias = item.id === "prumo" ? [normalizeOccurrence({ ...newOcorrencia("ok"), descTxt:"COLUNA NA TOLERÂNCIA DO PRUMO", localTxt:"LONGITUDINAL / TRANSVERSAL", status:"ok" }, item, "ok")] : [];
+    item.revisado=true; item.status="ok"; await saveVistoriaNow(); render();
+  });
+  const na=el("button",{class:"quick-secondary-btn"},"N/A");na.addEventListener("click",async()=>{item.ocorrencias=[];item.revisado=true;item.status="naoaplica";await saveVistoriaNow();render();}); actions.appendChild(ok);actions.appendChild(na);wrap.appendChild(actions);
 
-  if (item.tipo === "medicao") {
-    const row = el("div", { style: "display:flex;align-items:center;gap:8px;margin-bottom:14px" });
-    const input = el("input", { class: "input", type: "number", inputmode: "decimal", value: item.valor || "", placeholder: `Valor em ${item.unidade} (mínimo ${item.min})`, style: "flex:1" });
-    input.addEventListener("input", (e2) => {
-      item.valor = e2.target.value;
-      item.status = item.valor === "" ? "pendente" : statusFromMedicao(item.valor, item.min);
-      saveVistoriaDebounced();
-      render();
-    });
-    row.appendChild(input);
-    row.appendChild(Tag(item.status, "sm"));
-    wrap.appendChild(row);
-  } else {
-    const btnRow = el("div", { style: "display:flex;flex-direction:column;gap:8px;margin-bottom:16px" });
-    const opcoes = [["ok", "Conforme", "check"], ["problema", "Com anomalia", "alert"], ["naoaplica", "Não se aplica", "minus"]];
-    opcoes.forEach(([val, label, icon]) => {
-      const active = item.status === val;
-      const btn = el("button", { class: "status-btn" + (active ? " active-" + val : ""), style: "width:100%;padding:13px;font-size:13px" },
-        el("span", { html: svg(icon, 16) }), label);
-      btn.addEventListener("click", () => {
-        if (val === "ok" || val === "naoaplica") { item.status = val; item.obs = ""; item.descTxt = ""; item.tipoTxt = ""; item.localTxt = ""; item.grauTxt = ""; }
-        else { item.status = "problema"; }
-        saveVistoriaDebounced();
-        render();
-      });
-      btnRow.appendChild(btn);
-    });
-    wrap.appendChild(btnRow);
-
-    if (isProblem(item.status)) {
-      if (item.descOpcoes) wrap.appendChild(Field("Descrição", suggestInput(item.descTxt, (val) => { item.descTxt = val; saveVistoriaDebounced(); }, "Digite a descrição da anomalia", item.descOpcoes)));
-      if (item.tipoOpcoes) wrap.appendChild(Field("Tipo", suggestInput(item.tipoTxt, (val) => { item.tipoTxt = val; saveVistoriaDebounced(); }, "Digite o tipo/componente", item.tipoOpcoes)));
-      wrap.appendChild(Field("Nível", inputEl(item.corte || "", (val) => { item.corte = val; saveVistoriaDebounced(); }, "Ex: 1, 3, 18")));
-      if (item.localOpcoes) wrap.appendChild(Field(item.localLabel || "Localização", suggestInput(item.localTxt, (val) => { item.localTxt = val; saveVistoriaDebounced(); }, "Digite a localização", item.localOpcoes)));
-      wrap.appendChild(Field("Grau", suggestInput(item.grauTxt, (val) => { item.grauTxt = val; saveVistoriaDebounced(); }, "Digite o grau (Leve, Médio, Grave, Gravíssimo)", GRAU_OPCOES)));
-
-      const obsBox = el("textarea", { class: "input", rows: 2, placeholder: "Observação (opcional)", style: "resize:vertical" });
-      obsBox.value = item.obs || "";
-      obsBox.addEventListener("input", (e2) => { item.obs = e2.target.value; saveVistoriaDebounced(); });
-      wrap.appendChild(el("div", { class: "field" }, el("label", {}, "Observações"), obsBox));
-
-      wrap.appendChild(Field("Quantidade", inputEl(item.qtd == null ? 1 : item.qtd, (val) => { item.qtd = val; saveVistoriaDebounced(); }, "1", "number")));
-
-      const photoWrap = el("div", { style: "margin-bottom:8px" });
-      renderPhotoArea(photoWrap, item);
-      wrap.appendChild(photoWrap);
-    }
+  if(item.id==="prumo"){
+    const q=el("button",{class:"field-ok-btn",style:"width:100%;margin:10px 0"},"✓ Longitudinal + Transversal na tolerância");q.addEventListener("click",async()=>{item.ocorrencias=[normalizeOccurrence({...newOcorrencia("ok"),descTxt:"COLUNA NA TOLERÂNCIA DO PRUMO",localTxt:"LONGITUDINAL / TRANSVERSAL",status:"ok"},item,"ok")];item.revisado=true;await saveVistoriaNow();render();});wrap.appendChild(q);
   }
 
-  const backBtn = el("button", { class: "submit-btn", style: "width:100%;margin-top:14px" }, "Voltar para o montante");
-  backBtn.addEventListener("click", async () => { await saveVistoriaNow(); go("montante", v.id, e.id, m.id); });
-  wrap.appendChild(backBtn);
-  return wrap;
+  const list=el("div",{style:"display:flex;flex-direction:column;gap:10px;margin-top:10px"});
+  (item.ocorrencias||[]).forEach((oc,idx)=>list.appendChild(MontanteOcorrenciaCard(oc,idx,item)));wrap.appendChild(list);
+  const add=el("button",{class:"quick-anomaly-btn",style:"width:100%;margin-top:12px"},el("span",{html:svg("plus",18)}),item.id==="prumo"?"Adicionar resultado / eixo":"Adicionar outra ocorrência");
+  add.addEventListener("click",async()=>{item.ocorrencias=item.ocorrencias||[];item.ocorrencias.push(newOcorrencia(item.id==="prumo"?"pendente":"problema"));item.status=item.id==="prumo"?"pendente":"problema";await saveVistoriaNow();render();});wrap.appendChild(add);
+  wrap.appendChild(el("div",{class:"field-mode-hint",style:"margin-top:8px"},"O mesmo código pode ter vários registros no mesmo montante. Cada registro pode ter até 4 fotos."));
+  const back=el("button",{class:"submit-btn",style:"width:100%;margin-top:16px"},"Voltar para o montante");back.addEventListener("click",async()=>{syncMontanteItemStatus(item);await saveVistoriaNow();go("montante",v.id,e.id,m.id);});wrap.appendChild(back);return wrap;
 }
+function MontanteOcorrenciaCard(oc,idx,item){
+  normalizeOccurrence(oc,item,item.id==="prumo"?"pendente":"problema");
+  const card=Card({class:"occurrence-card",style:"padding:12px"}); const st=ocorrenciaStatus(oc,item);
+  card.appendChild(el("div",{class:"occurrence-head"},el("div",{},el("div",{style:"font-weight:700"},item.id==="prumo"?`Resultado ${idx+1}`:`Ocorrência ${idx+1}`),Tag(st,"sm")),(()=>{const b=el("button",{class:"icon-btn",html:svg("trash",15)});b.addEventListener("click",async()=>{if(confirm("Remover este registro?")){item.ocorrencias.splice(idx,1);syncMontanteItemStatus(item);await saveVistoriaNow();render();}});return b;})()));
+  if(item.descOpcoes)card.appendChild(Field("Descrição / resultado",suggestInput(oc.descTxt,(val)=>{oc.descTxt=val;oc.status=ocorrenciaStatus(oc,item);syncMontanteItemStatus(item);saveVistoriaDebounced();},"Selecione ou digite",item.descOpcoes)));
+  if(item.tipoOpcoes)card.appendChild(Field("Tipo / componente",suggestInput(oc.tipoTxt,(val)=>{oc.tipoTxt=val;saveVistoriaDebounced();},"Tipo",item.tipoOpcoes)));
+  card.appendChild(Field("Nível",inputEl(oc.corte||"",(val)=>{oc.corte=val;saveVistoriaDebounced();},"Ex: 1, 3, 18")));
+  if(item.localOpcoes)card.appendChild(Field(item.localLabel||"Localização",suggestInput(oc.localTxt,(val)=>{oc.localTxt=val;oc.status=ocorrenciaStatus(oc,item);syncMontanteItemStatus(item);saveVistoriaDebounced();},"Localização",item.localOpcoes)));
+  if(item.id!=="prumo")card.appendChild(Field("Grau",suggestInput(oc.grauTxt,(val)=>{oc.grauTxt=val;saveVistoriaDebounced();},"Leve, Médio, Grave, Gravíssimo",GRAU_OPCOES)));
+  const obs=el("textarea",{class:"input",rows:2,placeholder:"Observação (opcional)"});obs.value=oc.obs||"";obs.addEventListener("input",(ev)=>{oc.obs=ev.target.value;saveVistoriaDebounced();});card.appendChild(el("div",{class:"field"},el("label",{},"Observações"),obs));
+  card.appendChild(Field("Quantidade",inputEl(oc.qtd==null?1:oc.qtd,(val)=>{oc.qtd=val;saveVistoriaDebounced();},"1","number")));
+  const photos=el("div",{});renderPhotoArea(photos,oc);card.appendChild(photos);return card;
+}
+
 function ChipMultiSelect(label, options, selectedArr, onChange) {
   const wrap = el("div", { class: "field" }, el("label", {}, label + (selectedArr.length ? ` (${selectedArr.length} selecionada${selectedArr.length > 1 ? "s" : ""})` : "")));
   const chipWrap = el("div", { class: "chip-select-wrap" });
@@ -1134,29 +1208,13 @@ function ChipMultiSelect(label, options, selectedArr, onChange) {
 }
 function renderPhotoArea(container, item) {
   container.innerHTML = "";
-  if (item.foto) {
-    const wrap = el("div", { class: "photo-wrap" },
-      el("img", { class: "photo-thumb", src: item.foto }),
-      el("button", { class: "photo-remove", html: svg("x", 12) }));
-    wrap.querySelector(".photo-remove").addEventListener("click", () => { item.foto = null; saveVistoriaNow(); renderPhotoArea(container, item); });
-    container.appendChild(wrap);
-  } else {
-    const btn = el("button", { class: "photo-add-btn" }, el("span", { html: svg("camera", 15) }), "Anexar foto");
-    const input = el("input", { type: "file", accept: "image/*", capture: "environment", style: "display:none" });
-    input.addEventListener("change", async (e) => {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-      const b64 = await resizeImage(file);
-      item.foto = b64;
-      saveVistoriaNow();
-      renderPhotoArea(container, item);
-    });
-    btn.addEventListener("click", () => input.click());
-    container.appendChild(btn);
-    container.appendChild(input);
-  }
+  item.fotos = occurrencePhotos(item);
+  const label=el("div",{class:"photo-label"},`Fotos (${item.fotos.length}/4)`,el("span",{},"até 1200 px · JPEG 72%"));container.appendChild(label);
+  const grid=el("div",{class:"photo-grid"});
+  item.fotos.forEach((src,idx)=>{const wrap=el("div",{class:"photo-wrap"},el("img",{class:"photo-thumb",src}),el("button",{class:"photo-remove",html:svg("x",12)}));wrap.querySelector(".photo-remove").addEventListener("click",async()=>{item.fotos.splice(idx,1);await saveVistoriaNow();renderPhotoArea(container,item);});grid.appendChild(wrap);});
+  if(item.fotos.length<4){const btn=el("button",{class:"photo-add-btn photo-tile"},el("span",{html:svg("camera",20)}),item.fotos.length?"Outra foto":"Anexar foto");const input=el("input",{type:"file",accept:"image/*",capture:"environment",style:"display:none"});input.addEventListener("change",async(ev)=>{const file=ev.target.files&&ev.target.files[0];if(!file)return;try{const b64=await resizeImage(file);item.fotos=occurrencePhotos(item);if(item.fotos.length<4)item.fotos.push(b64);await saveVistoriaNow();renderPhotoArea(container,item);}catch(err){alert("Não foi possível processar a foto.");}});btn.addEventListener("click",()=>input.click());grid.appendChild(btn);grid.appendChild(input);}
+  container.appendChild(grid);
 }
-
 /* ---------------- Histórico ---------------- */
 function HistoryScreen() {
   const wrap = el("div", { class: "screen" });
@@ -1257,15 +1315,20 @@ async function buildInspectionPdf(v) {
     ensureSpace(30);
     text(`Estrutura ${e.codigo || "—"}`, 13, { bold: true, gap: 2 });
     const sub = [e.setor, e.tipoEstrutura, e.rua && "Rua " + e.rua, e.lado && "Lado " + e.lado, e.fabricante].filter(Boolean).join("  ·  ");
-    if (sub) text(sub, 9, { color: "#9AA2AC", gap: 8 });
+    if (sub) text(sub, 9, { color: "#9AA2AC", gap: 4 });
+    if (e.observacoesGerais) text("Observações da estrutura: " + e.observacoesGerais, 9, { color: "#5B6470", gap: 8 });
 
-    const problemEntries = (e.montantes || []).flatMap((m) => m.itens.filter((it) => itemAplicavel(it, e) && isProblem(it.status)).map((i) => ({ m, i })));
-    const estOcorrencias = (e.itensEstrutura || []).flatMap((it) => (it.ocorrencias || []).map((oc) => ({ it, oc })));
+    const problemEntries = montanteProblemEntries(e);
+    const estOcorrencias = estruturaProblemOccurrences(e);
+    const estMedicoes = estruturaMedicoesInformativas(e);
 
     if (!problemEntries.length && !estOcorrencias.length) {
-      text("Nenhum apontamento — todos os montantes conformes.", 10, { color: "#5B6470", gap: 12 });
-      return;
+      text("Nenhum apontamento de anomalia registrado.", 10, { color: "#5B6470", gap: 8 });
     }
+    for (const { it, oc } of estMedicoes) {
+      text(`${it.codigo ? "[" + it.codigo + "] " : ""}${it.nome} — ${oc.montanteRef || "Estrutura"}: ${oc.valor} ${it.unidade}`, 9.5, { color: "#476B55", gap: 4 });
+    }
+    if (!problemEntries.length && !estOcorrencias.length) return;
 
     for (const { it, oc } of estOcorrencias) {
       ensureSpace(50);
@@ -1273,8 +1336,8 @@ async function buildInspectionPdf(v) {
       const detailsEst = [oc.descTxt && "Descrição: " + oc.descTxt, oc.tipoTxt && "Tipo: " + oc.tipoTxt, oc.localTxt && "Localização: " + oc.localTxt, oc.grauTxt && "Grau: " + oc.grauTxt, it.tipo === "medicao" && oc.valor && "Medição: " + oc.valor + " " + it.unidade, oc.qtd && "Qtd: " + oc.qtd].filter(Boolean).join("  ·  ");
       if (detailsEst) text(detailsEst, 9, { color: "#5B6470", gap: 2 });
       if (oc.obs) text("Obs: " + oc.obs, 9, { color: "#5B6470", gap: 4 });
-      if (oc.foto) {
-        try { ensureSpace(110); doc.addImage(oc.foto, "JPEG", marginX, y, 100, 100); y += 108; } catch (err) { /* ignora foto que falhar */ }
+      for (const foto of occurrencePhotos(oc)) {
+        try { ensureSpace(110); doc.addImage(foto, "JPEG", marginX, y, 100, 100); y += 108; } catch (err) { /* ignora foto que falhar */ }
       }
       y += 6;
     }
@@ -1284,13 +1347,10 @@ async function buildInspectionPdf(v) {
       text(`${i.codigo ? "[" + i.codigo + "] " : ""}${i.nome}  —  Montante Nº ${m.numero}`, 10.5, { bold: true, gap: 2 });
       const details = [i.descTxt && "Descrição: " + i.descTxt, i.tipoTxt && "Tipo: " + i.tipoTxt, i.localTxt && "Localização: " + i.localTxt, i.grauTxt && "Grau: " + i.grauTxt, i.corte && "Nível: " + i.corte, i.qtd && "Qtd: " + i.qtd].filter(Boolean).join("  ·  ");
       if (details) text(details, 9, { color: "#5B6470", gap: 2 });
-      if (i.obs) text("Obs: " + i.obs, 9, { color: "#5B6470", gap: 4 });
-      if (i.foto) {
-        try {
-          ensureSpace(110);
-          doc.addImage(i.foto, "JPEG", marginX, y, 100, 100);
-          y += 108;
-        } catch (e) { /* ignora foto que falhar */ }
+      if (m.observacoes) text("Obs. montante: " + m.observacoes, 9, { color: "#5B6470", gap: 2 });
+      if (i.obs) text("Obs. ocorrência: " + i.obs, 9, { color: "#5B6470", gap: 4 });
+      for (const foto of occurrencePhotos(i)) {
+        try { ensureSpace(110); doc.addImage(foto, "JPEG", marginX, y, 100, 100); y += 108; } catch (err) { /* ignora foto que falhar */ }
       }
       y += 6;
     }
@@ -1413,15 +1473,17 @@ function ReportScreen() {
 
   (v.estruturas || []).forEach((e) => {
     const est = estruturaStatus(e);
-    const problemEntries = (e.montantes || []).flatMap((m) => m.itens.filter((it) => itemAplicavel(it, e) && isProblem(it.status)).map((i) => ({ m, i })));
-    const estOcorrencias = (e.itensEstrutura || []).flatMap((it) => (it.ocorrencias || []).map((oc) => ({ it, oc })));
+    const problemEntries = montanteProblemEntries(e);
+    const estOcorrencias = estruturaProblemOccurrences(e);
+    const estMedicoes = estruturaMedicoesInformativas(e);
     printable.appendChild(el("h3", { class: "section-title", style: "display:flex;align-items:center;justify-content:space-between" },
       el("span", {}, "Estrutura ", e.codigo || "—"), Tag(est, "sm")));
     const sub = [e.rua && "Rua " + e.rua, e.lado && "Lado " + e.lado, (e.montantes || []).length + " montante(s)", e.fabricante].filter(Boolean).join(" · ");
     if (sub) printable.appendChild(el("div", { style: "font-size:12px;color:var(--ink-faint);margin:-4px 0 8px" }, sub));
+    if (e.observacoesGerais) printable.appendChild(el("div", { style: "font-size:12px;color:var(--ink-soft);margin:0 0 8px" }, "Observações: " + e.observacoesGerais));
 
     if (!problemEntries.length && !estOcorrencias.length) {
-      printable.appendChild(el("div", { class: "card", style: "padding:10px 12px;margin-bottom:10px;color:var(--ink-soft);font-size:13px" }, "Nenhum apontamento — todos os montantes conformes."));
+      printable.appendChild(el("div", { class: "card", style: "padding:10px 12px;margin-bottom:10px;color:var(--ink-soft);font-size:13px" }, "Nenhum apontamento de anomalia registrado."));
     } else {
       const itemsList = el("div", { style: "display:flex;flex-direction:column;gap:8px;margin-bottom:10px" });
       estOcorrencias.forEach(({ it, oc }) => {
@@ -1434,7 +1496,7 @@ function ReportScreen() {
         if (detalhes) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, detalhes));
         if (it.tipo === "medicao" && oc.valor) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, `Medição: ${oc.valor} ${it.unidade}`));
         if (oc.obs) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, oc.obs));
-        if (oc.foto) c.appendChild(el("img", { src: oc.foto, style: "margin-top:8px;width:110px;height:110px;object-fit:cover;border-radius:6px" }));
+        occurrencePhotos(oc).forEach((foto) => c.appendChild(el("img", { src: foto, style: "margin:8px 6px 0 0;width:110px;height:110px;object-fit:cover;border-radius:6px" })));
         itemsList.appendChild(c);
       });
       problemEntries.forEach(({ m, i }) => {
@@ -1443,12 +1505,21 @@ function ReportScreen() {
           el("div", { style: "font-weight:600;font-size:13.5px" }, CodeBadge(i.codigo), i.nome),
           Tag(i.status, "sm")));
         c.appendChild(el("div", { class: "mono", style: "font-size:11px;color:var(--ink-faint);margin-top:3px" }, "Montante Nº " + m.numero));
+        const detalhesMont = [i.descTxt, i.tipoTxt, i.localTxt, i.grauTxt, i.corte && "Nível " + i.corte].filter(Boolean).join(" · ");
+        if (detalhesMont) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, detalhesMont));
         if (i.valor) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, `Medição: ${i.valor} ${i.unidade}`));
-        if (i.obs) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, i.obs));
-        if (i.foto) c.appendChild(el("img", { src: i.foto, style: "margin-top:8px;width:110px;height:110px;object-fit:cover;border-radius:6px" }));
+        if (m.observacoes) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, "Obs. montante: " + m.observacoes));
+        if (i.obs) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, "Obs. ocorrência: " + i.obs));
+        occurrencePhotos(i).forEach((foto) => c.appendChild(el("img", { src: foto, style: "margin:8px 6px 0 0;width:110px;height:110px;object-fit:cover;border-radius:6px" })));
         itemsList.appendChild(c);
       });
       printable.appendChild(itemsList);
+    }
+    if (estMedicoes.length) {
+      const medCard = Card({ style: "padding:10px 12px;margin-bottom:10px" });
+      medCard.appendChild(el("div", { style: "font-weight:700;font-size:12.5px;margin-bottom:5px" }, "Medições conformes registradas"));
+      estMedicoes.forEach(({it,oc}) => medCard.appendChild(el("div", { style: "font-size:12px;color:var(--ink-soft);padding:3px 0" }, `${it.codigo ? "["+it.codigo+"] " : ""}${oc.montanteRef || "Estrutura"}: ${oc.valor} ${it.unidade}`)));
+      printable.appendChild(medCard);
     }
 
     const agg = {};
@@ -1481,8 +1552,8 @@ function ReportScreen() {
 async function shareReport(v, st) {
   let text = `Relatório de Inspeção — ${state.config.empresa}\nLoja/CD: ${v.lojaCd}${v.local ? " · " + v.local : ""}\nInspetor(es): ${v.inspetor}\nData: ${fmtDateOnly(v.data)}\nResultado geral: ${STATUS[st].label}\n`;
   (v.estruturas || []).forEach((e) => {
-    const problemEntries = (e.montantes || []).flatMap((m) => m.itens.filter((it) => itemAplicavel(it, e) && isProblem(it.status)).map((i) => ({ m, i })));
-    const estOcorrencias = (e.itensEstrutura || []).flatMap((it) => (it.ocorrencias || []).map((oc) => ({ it, oc })));
+    const problemEntries = montanteProblemEntries(e);
+    const estOcorrencias = estruturaProblemOccurrences(e);
     text += `\n— Estrutura ${e.codigo} [${STATUS[estruturaStatus(e)].label}] —\n`;
     const linhas = [];
     problemEntries.forEach(({ m, i }) => linhas.push(`  - Montante ${m.numero}: ${i.codigo ? "[" + i.codigo + "] " : ""}${i.nome} [${STATUS[i.status].label}]${i.obs ? ": " + i.obs : ""}`));
@@ -1500,42 +1571,20 @@ async function shareReport(v, st) {
 
 /* ---------------- Relatório de Anomalias (tabela / CSV) ---------------- */
 function buildAnomaliaRows(v) {
-  const rows = [];
-  (v.estruturas || []).forEach((e) => {
-    (e.montantes || []).forEach((m) => {
-      m.itens.filter((it) => itemAplicavel(it, e) && isProblem(it.status)).forEach((i) => {
-        rows.push({
-          estruturaId: e.id, montanteId: m.id, itemId: i.id,
-          setor: e.setor || "", tipoEstrutura: e.tipoEstrutura || "", numeroEstrutura: e.codigo || "",
-          lado: e.lado || "", montante: m.numero, corte: i.corte || "",
-          codigoAnomalia: i.codigo || "", nomeAnomalia: i.nome || "",
-          descricao: i.descTxt || "", tipo: i.tipoTxt || "", localizacao: i.localTxt || "",
-          grau: i.grauTxt || "",
-          categoria: i.categoria || "", correcao: i.correcao || "", qtd: i.qtd == null ? 1 : i.qtd,
-          fabricante: e.fabricante || "",
-        });
-      });
-    });
-    (e.itensEstrutura || []).forEach((it) => {
-      (it.ocorrencias || []).forEach((oc) => {
-        rows.push({
-          estruturaId: e.id, estItemId: it.id, ocorrenciaId: oc.id,
-          setor: e.setor || "", tipoEstrutura: e.tipoEstrutura || "", numeroEstrutura: e.codigo || "",
-          lado: e.lado || "", montante: oc.montanteRef || "(estrutura)", corte: "",
-          codigoAnomalia: it.codigo || "", nomeAnomalia: it.nome || "",
-          descricao: oc.descTxt || "", tipo: oc.tipoTxt || "", localizacao: oc.localTxt || "",
-          grau: oc.grauTxt || (it.tipo === "medicao" && oc.valor ? `Medição: ${oc.valor} ${it.unidade}` : ""),
-          categoria: it.categoria || "", correcao: oc.correcao || "", qtd: oc.qtd == null ? 1 : oc.qtd,
-          fabricante: e.fabricante || "",
-        });
-      });
-    });
+  const rows=[];
+  (v.estruturas||[]).forEach((e)=>{
+    montanteProblemEntries(e).forEach(({m,item,oc,i})=>rows.push({
+      estruturaId:e.id,montanteId:m.id,itemId:item.id,ocorrenciaId:oc&&oc.id,
+      setor:e.setor||"",tipoEstrutura:e.tipoEstrutura||"",numeroEstrutura:e.codigo||"",lado:e.lado||"",montante:m.numero,corte:i.corte||"",
+      codigoAnomalia:item.codigo||"",nomeAnomalia:item.nome||"",descricao:i.descTxt||"",tipo:i.tipoTxt||"",localizacao:i.localTxt||"",grau:i.grauTxt||"",
+      categoria:item.categoria||"",correcao:i.correcao||"",qtd:i.qtd==null?1:i.qtd,fabricante:m.fabricante||e.fabricante||""
+    }));
+    estruturaProblemOccurrences(e).forEach(({it,oc})=>rows.push({
+      estruturaId:e.id,estItemId:it.id,ocorrenciaId:oc.id,setor:e.setor||"",tipoEstrutura:e.tipoEstrutura||"",numeroEstrutura:e.codigo||"",lado:e.lado||"",montante:oc.montanteRef||"(estrutura)",corte:"",
+      codigoAnomalia:it.codigo||"",nomeAnomalia:it.nome||"",descricao:oc.descTxt||"",tipo:oc.tipoTxt||"",localizacao:oc.localTxt||"",grau:oc.grauTxt||(it.tipo==="medicao"&&oc.valor?`Medição: ${oc.valor} ${it.unidade}`:""),categoria:it.categoria||"",correcao:oc.correcao||"",qtd:oc.qtd==null?1:oc.qtd,fabricante:e.fabricante||""
+    }));
   });
   return rows;
-}
-function pecaDoItem(i) {
-  if (i.tipoTxt) return i.tipoTxt;
-  return i.peca;
 }
 function csvEscape(val) {
   const s = String(val === null || val === undefined ? "" : val);
@@ -1601,15 +1650,17 @@ function AnomaliasScreen() {
         input.addEventListener("input", (e) => {
           r.correcao = e.target.value;
           const est = v.estruturas.find((x) => x.id === r.estruturaId);
-          if (r.ocorrenciaId) {
+          if (r.estItemId) {
             const estItem = est && (est.itensEstrutura || []).find((x) => x.id === r.estItemId);
-            const oc = estItem && estItem.ocorrencias.find((x) => x.id === r.ocorrenciaId);
-            if (oc) { oc.correcao = e.target.value; clearTimeout(state.saveTimer); state.saveTimer = setTimeout(() => idbSet("vistorias", undefined, v), 400); }
+            const oc = estItem && (estItem.ocorrencias || []).find((x) => x.id === r.ocorrenciaId);
+            if (oc) oc.correcao = e.target.value;
           } else {
             const mont = est && (est.montantes || []).find((x) => x.id === r.montanteId);
-            const item = mont && mont.itens.find((x) => x.id === r.itemId);
-            if (item) { item.correcao = e.target.value; clearTimeout(state.saveTimer); state.saveTimer = setTimeout(() => idbSet("vistorias", undefined, v), 400); }
+            const item = mont && (mont.itens || []).find((x) => x.id === r.itemId);
+            const occ = item && r.ocorrenciaId && (item.ocorrencias || []).find((x) => x.id === r.ocorrenciaId);
+            if (occ) occ.correcao = e.target.value; else if (item) item.correcao = e.target.value;
           }
+          clearTimeout(state.saveTimer); state.saveTimer = setTimeout(() => idbSet("vistorias", undefined, v), 400);
         });
         td.appendChild(input);
         tr.appendChild(td);
@@ -1628,28 +1679,10 @@ function AnomaliasScreen() {
 
 /* ---------------- Peças ---------------- */
 function buildPartsForVistoria(v) {
-  const bucket = {};
-  (v.estruturas || []).filter((e) => !e.resolvido && isProblem(estruturaStatus(e))).forEach((e) => {
-    (e.montantes || []).forEach((m) => {
-      m.itens.filter((it) => itemAplicavel(it, e) && isProblem(it.status)).forEach((i) => {
-        const q = Number(i.qtd) > 0 ? Number(i.qtd) : 1;
-        const peca = pecaDoItem(i);
-        if (!bucket[peca]) bucket[peca] = { peca, qtd: 0, graus: new Set(), refs: new Set() };
-        bucket[peca].qtd += q;
-        if (i.grauTxt) bucket[peca].graus.add(i.grauTxt);
-        bucket[peca].refs.add(`${e.codigo} · Montante ${m.numero}`);
-      });
-    });
-    (e.itensEstrutura || []).forEach((it) => {
-      (it.ocorrencias || []).forEach((oc) => {
-        const q = Number(oc.qtd) > 0 ? Number(oc.qtd) : 1;
-        const peca = oc.tipoTxt || it.peca;
-        if (!bucket[peca]) bucket[peca] = { peca, qtd: 0, graus: new Set(), refs: new Set() };
-        bucket[peca].qtd += q;
-        if (oc.grauTxt) bucket[peca].graus.add(oc.grauTxt);
-        bucket[peca].refs.add(`${e.codigo} · ${oc.montanteRef || "estrutura"}`);
-      });
-    });
+  const bucket={};
+  (v.estruturas||[]).filter((e)=>!e.resolvido&&isProblem(estruturaStatus(e))).forEach((e)=>{
+    montanteProblemEntries(e).forEach(({m,item,i})=>{const q=Number(i.qtd)>0?Number(i.qtd):1;const peca=i.tipoTxt||pecaDoItem(item);if(!bucket[peca])bucket[peca]={peca,qtd:0,graus:new Set(),refs:new Set()};bucket[peca].qtd+=q;if(i.grauTxt)bucket[peca].graus.add(i.grauTxt);bucket[peca].refs.add(`${e.codigo} · Montante ${m.numero}`);});
+    estruturaProblemOccurrences(e).forEach(({it,oc})=>{const q=Number(oc.qtd)>0?Number(oc.qtd):1;const peca=oc.tipoTxt||it.peca;if(!bucket[peca])bucket[peca]={peca,qtd:0,graus:new Set(),refs:new Set()};bucket[peca].qtd+=q;if(oc.grauTxt)bucket[peca].graus.add(oc.grauTxt);bucket[peca].refs.add(`${e.codigo} · ${oc.montanteRef||"estrutura"}`);});
   });
   return Object.values(bucket);
 }
@@ -1678,23 +1711,20 @@ function buildIndicadores(v) {
     (e.montantes || []).forEach((m) => {
       m.itens.filter((it) => itemAplicavel(it, e)).forEach((it) => {
         totalItensAplicaveis++;
-        if (it.status === "ok" || it.status === "naoaplica") totalItensConformes++;
-        if (isProblem(it.status)) {
-          totalApontamentos++;
-          const key = (it.codigo ? it.codigo + " — " : "") + it.nome;
-          anomaliaCount[key] = (anomaliaCount[key] || 0) + 1;
-          if (it.grauTxt) { const g = it.grauTxt.trim().toUpperCase(); grauCount[g] = (grauCount[g] || 0) + 1; }
-          if (it.foto) totalFotos++;
-        }
+        const stItem = montanteItemStatus(it);
+        if (stItem === "ok" || stItem === "naoaplica") totalItensConformes++;
+        const probs=(it.ocorrencias||[]).filter((oc)=>ocorrenciaStatus(oc,it)==="problema");
+        if(probs.length){probs.forEach((oc)=>{totalApontamentos++;const key=(it.codigo?it.codigo+" — ":"")+it.nome;anomaliaCount[key]=(anomaliaCount[key]||0)+1;if(oc.grauTxt){const g=oc.grauTxt.trim().toUpperCase();grauCount[g]=(grauCount[g]||0)+1;}totalFotos+=occurrencePhotos(oc).length;});}
+        else if(isProblem(stItem)){totalApontamentos++;const key=(it.codigo?it.codigo+" — ":"")+it.nome;anomaliaCount[key]=(anomaliaCount[key]||0)+1;totalFotos+=occurrencePhotos(it).length;}
       });
     });
     (e.itensEstrutura || []).forEach((it) => {
-      (it.ocorrencias || []).forEach((oc) => {
+      (it.ocorrencias || []).filter((oc) => ocorrenciaStatus(oc,it) === "problema").forEach((oc) => {
         totalApontamentos++;
         const key = (it.codigo ? it.codigo + " — " : "") + it.nome;
         anomaliaCount[key] = (anomaliaCount[key] || 0) + 1;
         if (oc.grauTxt) { const g = oc.grauTxt.trim().toUpperCase(); grauCount[g] = (grauCount[g] || 0) + 1; }
-        if (oc.foto) totalFotos++;
+        totalFotos += occurrencePhotos(oc).length;
       });
     });
   });
@@ -1871,17 +1901,25 @@ function buildPartsByLocation() {
   state.vistorias.filter((v) => v.finalizada).forEach((v) => {
     const key = v.lojaCd || "(sem Loja/CD)";
     (v.estruturas || []).filter((e) => !e.resolvido && isProblem(estruturaStatus(e))).forEach((e) => {
-      (e.montantes || []).forEach((m) => {
-        m.itens.filter((i) => isProblem(i.status)).forEach((i) => {
-          const q = Number(i.qtd) > 0 ? Number(i.qtd) : 1;
-          const peca = pecaDoItem(i);
-          if (!locations[key]) locations[key] = { local: v.local, itens: {} };
-          const bucket = locations[key].itens;
-          if (!bucket[peca]) bucket[peca] = { qtd: 0, graus: new Set(), refs: new Set() };
-          bucket[peca].qtd += q;
-          if (i.grauTxt) bucket[peca].graus.add(i.grauTxt);
-          bucket[peca].refs.add(`${e.codigo} · Montante ${m.numero}`);
-        });
+      montanteProblemEntries(e).forEach(({m,item,i}) => {
+        const q = Number(i.qtd) > 0 ? Number(i.qtd) : 1;
+        const peca = i.tipoTxt || pecaDoItem(item);
+        if (!locations[key]) locations[key] = { local: v.local, itens: {} };
+        const bucket = locations[key].itens;
+        if (!bucket[peca]) bucket[peca] = { qtd: 0, graus: new Set(), refs: new Set() };
+        bucket[peca].qtd += q;
+        if (i.grauTxt) bucket[peca].graus.add(i.grauTxt);
+        bucket[peca].refs.add(`${e.codigo} · Montante ${m.numero}`);
+      });
+      estruturaProblemOccurrences(e).forEach(({it,oc}) => {
+        const q = Number(oc.qtd) > 0 ? Number(oc.qtd) : 1;
+        const peca = oc.tipoTxt || it.peca;
+        if (!locations[key]) locations[key] = { local: v.local, itens: {} };
+        const bucket = locations[key].itens;
+        if (!bucket[peca]) bucket[peca] = { qtd: 0, graus: new Set(), refs: new Set() };
+        bucket[peca].qtd += q;
+        if (oc.grauTxt) bucket[peca].graus.add(oc.grauTxt);
+        bucket[peca].refs.add(`${e.codigo} · ${oc.montanteRef || "estrutura"}`);
       });
     });
   });
@@ -2051,18 +2089,22 @@ function ConfigScreen() {
   const nomeInput = el("input", { class: "input", placeholder: "Nome do item (ex: Guarda-corpo)" });
   const descInput = el("input", { class: "input", placeholder: "Descrição da anomalia (ex: Danificado, Faltante...)" });
   const categoriaInput = el("input", { class: "input", placeholder: "Categoria (ex: Estruturais, Segurança, Gerais, Iluminação)" });
-  const pecaInput = el("input", { class: "input" });
+  const familiaSelect = el("select", { class: "input" });
+  FAMILIAS_ORDEM.forEach((f) => familiaSelect.appendChild(el("option", { value: f }, f)));
+  const nivelSelect = el("select", { class: "input" });
+  [["montante","Montante"],["estrutura","Estrutura"]].forEach(([v,l]) => nivelSelect.appendChild(el("option", { value: v }, l)));
+  const pecaInput = el("input", { class: "input", placeholder: "Peça / componente associado" });
   const addRow = el("div", { class: "row" });
   const addBtn = el("button", { class: "ghost-btn", html: svg("plus", 15) });
   addBtn.addEventListener("click", () => {
     if (nomeInput.value.trim() && pecaInput.value.trim()) {
-      local.itens.push({ id: uid(), codigo: codigoInput.value.trim(), nome: nomeInput.value.trim(), descOpcoes: descInput.value.trim() ? [descInput.value.trim()] : undefined, categoria: categoriaInput.value.trim(), peca: pecaInput.value.trim() });
+      local.itens.push({ id: uid(), codigo: codigoInput.value.trim(), nome: nomeInput.value.trim(), descOpcoes: descInput.value.trim() ? [descInput.value.trim()] : undefined, categoria: categoriaInput.value.trim(), familia: familiaSelect.value, nivel: nivelSelect.value, peca: pecaInput.value.trim() });
       codigoInput.value = ""; nomeInput.value = ""; descInput.value = ""; categoriaInput.value = ""; pecaInput.value = "";
       renderItens();
     }
   });
   addRow.appendChild(pecaInput); addRow.appendChild(addBtn);
-  itensCard.appendChild(el("div", { style: "margin-top:10px;display:flex;flex-direction:column;gap:6px" }, codigoInput, nomeInput, descInput, categoriaInput, addRow));
+  itensCard.appendChild(el("div", { style: "margin-top:10px;display:flex;flex-direction:column;gap:6px" }, codigoInput, nomeInput, descInput, categoriaInput, familiaSelect, nivelSelect, addRow));
   wrap.appendChild(itensCard);
 
   const backupCard = Card({ style: "margin-bottom:14px" });
@@ -2071,7 +2113,7 @@ function ConfigScreen() {
   const backupRow = el("div", { class: "row" });
   const exportBtn = el("button", { class: "ghost-btn", style: "flex:1;padding:10px" }, "Exportar backup (.json)");
   exportBtn.addEventListener("click", async () => {
-    const all = { config: state.config, vistorias: await idbGetAll("vistorias"), orderedParts: state.orderedParts, exportadoEm: new Date().toISOString() };
+    const all = { schemaVersion: 2, appVersion: APP_VERSION, config: state.config, vistorias: await idbGetAll("vistorias"), orderedParts: state.orderedParts, exportadoEm: new Date().toISOString() };
     download(`backup-inspecoes-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(all), "application/json");
   });
   const importInput = el("input", { type: "file", accept: "application/json", style: "display:none" });
@@ -2083,9 +2125,11 @@ function ConfigScreen() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      if (Array.isArray(data.vistorias)) { for (const v of data.vistorias) await idbSet("vistorias", undefined, v); }
+      if (Array.isArray(data.vistorias)) { for (const v of data.vistorias) await idbSet("vistorias", undefined, normalizeVistoria(v)); }
+      if (data.config && typeof data.config === "object") { state.config = { ...DEFAULT_CONFIG, ...data.config, itens: mergeCatalog(data.config.itens || []) }; await idbSet("config", "main", state.config); }
+      if (data.orderedParts && typeof data.orderedParts === "object") { state.orderedParts = data.orderedParts; await idbSet("parts", "main", state.orderedParts); }
       await persistVistoriaList();
-      alert(`Importado: ${(data.vistorias || []).length} inspeção(ões).`);
+      alert(`Backup restaurado: ${(data.vistorias || []).length} inspeção(ões)${data.config ? ", configurações" : ""}${data.orderedParts ? ", lista de peças" : ""}.`);
       render();
     } catch (err) { alert("Arquivo inválido."); }
   });

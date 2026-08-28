@@ -1,4 +1,4 @@
-const CACHE_NAME = "inspecao-pp-v42";
+const CACHE_NAME = "inspecao-pp-v2.15";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -25,19 +25,33 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Cache-first para o app shell; qualquer outra requisição (ex: fontes) tenta rede e cai pro cache se falhar.
+// Estratégia híbrida: app principal recebe atualizações pela rede e mantém fallback offline; imagens e demais recursos priorizam o cache.
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request)
+  const url = new URL(event.request.url);
+  const sameOrigin = url.origin === self.location.origin;
+
+  // Navegação e arquivos principais: rede primeiro para receber versões novas;
+  // se a loja estiver offline, cai imediatamente no cache local.
+  if (sameOrigin && (event.request.mode === "navigate" || /\.(?:js|css|html|json)$/.test(url.pathname))) {
+    event.respondWith(
+      fetch(event.request)
         .then((response) => {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
           return response;
         })
-        .catch(() => cached);
-    })
+        .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./index.html")))
+    );
+    return;
+  }
+
+  // Imagens e demais recursos: cache primeiro.
+  event.respondWith(
+    caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
+      const clone = response.clone();
+      caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+      return response;
+    }))
   );
 });

@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Inspeção Porta-Pallet</title>
 <meta name="theme-color" content="#1C2128" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -19,7 +19,7 @@
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch(console.error);
+        navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(console.error);
       });
     }
   </script>
