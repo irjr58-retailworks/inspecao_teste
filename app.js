@@ -84,8 +84,8 @@ const DEFAULT_ITEMS = [
   { id: "piso", codigo: "9.37", categoria: "Gerais", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras", descOpcoes: ["PISO INDUSTRIAL DANIFICADO", "PISO INDUSTRIAL DESNIVELADO", "PAREDE DO PRÉDIO DANIFICADA", "COLUNA DO PRÉDIO DANIFICADA", "ÁGUA EMPOÇADA", "GOTEIRA", "OUTROS"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras" },
   { id: "iluminacao", codigo: "9.45", categoria: "Iluminação", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Aferição de iluminação nos corredores", tipo: "medicao", unidade: "lux", min: 200, peca: "Aferição de iluminação nos corredores" },
 ];
-const APP_VERSION = "2.15";
-const APP_VERSION_DATE = "28/08/2026";
+const APP_VERSION = "2.16";
+const APP_VERSION_DATE = "31/08/2026";
 const CATALOG_VERSION = 5;
 const DEFAULT_CONFIG = {
   empresa: "Minha Empresa",
@@ -227,6 +227,9 @@ function normalizeVistoria(v) {
     e.montantes = e.montantes || [];
     e.observacoesGerais = e.observacoesGerais || "";
     if (e.qtdEstimada == null) e.qtdEstimada = e.modulos || "";
+    if (e.visualFinalizada == null) e.visualFinalizada = Boolean(e.finalizada);
+    if (e.prumoFinalizada == null) e.prumoFinalizada = Boolean(e.finalizada);
+    if (e.luxFinalizada == null) e.luxFinalizada = Boolean(e.finalizada);
     (e.itensEstrutura || []).forEach((it) => {
       it.ocorrencias = (it.ocorrencias || []).map((oc) => normalizeOccurrence(oc, it));
     });
@@ -234,6 +237,7 @@ function normalizeVistoria(v) {
       m.fabricante = m.fabricante == null ? (e.fabricante || "") : m.fabricante;
       m.tipoMontante = m.tipoMontante || "";
       m.observacoes = m.observacoes || "";
+      if (!m.visualInspecionadoAt && m.inspecionadoAt) m.visualInspecionadoAt = m.inspecionadoAt;
       m.itens = (m.itens || []).map(normalizeMontanteItem);
     });
   });
@@ -257,16 +261,116 @@ function estruturaMedicoesInformativas(e) {
     .filter((oc) => ["ok", "naoaplica"].includes(ocorrenciaStatus(oc, it)))
     .map((oc) => ({ it, oc })) : []);
 }
+function visualItemsMontante(m, e) {
+  return (m.itens || []).filter((it) => it.id !== "prumo" && (!e || itemAplicavel(it, e)));
+}
+function visualStructureItems(e) {
+  return (e.itensEstrutura || []).filter((it) => it.id !== "iluminacao");
+}
+function visualMontanteStatus(m, e) {
+  const itens = visualItemsMontante(m, e);
+  if (!itens.length) return m.visualInspecionadoAt ? "ok" : "pendente";
+  const statuses = itens.map(montanteItemStatus);
+  if (statuses.includes("problema")) return "problema";
+  if (statuses.includes("pendente") && !m.visualInspecionadoAt) return "pendente";
+  if (statuses.includes("pendente")) return "pendente";
+  return "ok";
+}
+function visualMontanteDone(m, e) {
+  return Boolean(m.visualInspecionadoAt) && visualItemsMontante(m, e).every((it) => montanteItemStatus(it) !== "pendente");
+}
+function prumoItem(m) { return (m.itens || []).find((it) => it.id === "prumo") || null; }
+function prumoDone(m) { const it = prumoItem(m); return Boolean(it) && montanteItemStatus(it) !== "pendente"; }
+function iluminacaoItem(e) { return (e.itensEstrutura || []).find((it) => it.id === "iluminacao") || null; }
+function visualProgress(e) {
+  const total = (e.montantes || []).length;
+  const done = (e.montantes || []).filter((m) => visualMontanteDone(m, e)).length;
+  return { total, done, pending: Math.max(total - done, 0), complete: Boolean(e.visualFinalizada) && total > 0 && done === total };
+}
+function prumoProgress(e) {
+  const total = (e.montantes || []).length;
+  const done = (e.montantes || []).filter(prumoDone).length;
+  const problems = (e.montantes || []).filter((m) => { const it=prumoItem(m); return it && montanteItemStatus(it)==="problema"; }).length;
+  return { total, done, pending: Math.max(total - done, 0), problems, complete: total > 0 && done === total };
+}
+function luxProgress(e) {
+  const it = iluminacaoItem(e);
+  const occs = it ? (it.ocorrencias || []) : [];
+  const valid = occs.filter((oc) => ocorrenciaStatus(oc, it) !== "pendente").length;
+  const problems = occs.filter((oc) => ocorrenciaStatus(oc, it) === "problema").length;
+  return { measurements: valid, pending: occs.length - valid, problems, complete: Boolean(e.luxFinalizada) && valid > 0 && occs.length === valid };
+}
+function completeMontanteVisualAsInspected(m, e) {
+  visualItemsMontante(m, e).forEach((it) => {
+    if (montanteItemStatus(it) !== "pendente") return;
+    it.revisado = true;
+    it.status = "ok";
+    syncMontanteItemStatus(it);
+  });
+  m.visualInspecionadoAt = new Date().toISOString();
+}
+function completeStructureVisualAsInspected(e) {
+  visualStructureItems(e).forEach((it) => {
+    if (estruturaEstItemStatus(it) === "pendente") it.revisado = true;
+  });
+  e.visualFinalizada = true;
+  e.visualFinalizadaAt = new Date().toISOString();
+}
+function inspectionStageSummary(v) {
+  const estruturas = v.estruturas || [];
+  const montantes = estruturas.flatMap((e) => e.montantes || []);
+  const visualDone = estruturas.reduce((sum,e)=>sum + visualProgress(e).done,0);
+  const prumoDoneCount = estruturas.reduce((sum,e)=>sum + prumoProgress(e).done,0);
+  const luxDone = estruturas.filter((e)=>luxProgress(e).complete).length;
+  return { estruturas: estruturas.length, montantes: montantes.length, visualDone, prumoDone: prumoDoneCount, luxDone };
+}
 function countPendingInspection(v) {
-  let montantes = 0, itens = 0, estruturaItens = 0;
+  let visualMontantes = 0, visualItens = 0, estruturaItens = 0, prumo = 0, luxEstruturas = 0;
   (v.estruturas || []).forEach((e) => {
     (e.montantes || []).forEach((m) => {
-      const p = (m.itens || []).filter((it) => montanteItemStatus(it) === "pendente").length;
-      if (p) { montantes++; itens += p; }
+      const p = visualItemsMontante(m,e).filter((it) => montanteItemStatus(it) === "pendente").length;
+      if (p || !m.visualInspecionadoAt) { visualMontantes++; visualItens += p; }
+      if (!prumoDone(m)) prumo++;
     });
-    estruturaItens += (e.itensEstrutura || []).filter((it) => estruturaEstItemStatus(it) === "pendente").length;
+    estruturaItens += visualStructureItems(e).filter((it) => estruturaEstItemStatus(it) === "pendente").length;
+    if (!luxProgress(e).complete) luxEstruturas++;
   });
-  return { montantes, itens, estruturaItens, total: itens + estruturaItens };
+  return { visualMontantes, visualItens, estruturaItens, prumo, luxEstruturas, total: visualItens + estruturaItens + prumo + luxEstruturas };
+}
+function setResume(v, mode, e, m = null) {
+  if (!v) return;
+  v.resume = { mode, estruturaId: e && e.id || null, montanteId: m && m.id || null, updatedAt: new Date().toISOString() };
+}
+function recentAnomalyChoices(v, limit = 5) {
+  const seen = new Set(), out = [];
+  const estruturas = (v.estruturas || []).slice().reverse();
+  for (const e of estruturas) {
+    const montantes = (e.montantes || []).slice().sort((a,b)=>b.numero-a.numero);
+    for (const m of montantes) {
+      for (const item of (m.itens || [])) {
+        if (item.id === "prumo") continue;
+        if (!(item.ocorrencias || []).some((oc)=>ocorrenciaStatus(oc,item)==="problema")) continue;
+        if (seen.has(item.id)) continue;
+        seen.add(item.id); out.push(item);
+        if (out.length >= limit) return out;
+      }
+    }
+  }
+  return out;
+}
+function lastVisualAnomalyBefore(e, currentM) {
+  const montantes=(e.montantes||[]).filter((m)=>m.numero < currentM.numero).sort((a,b)=>b.numero-a.numero);
+  for (const m of montantes) {
+    for (const item of (m.itens||[]).slice().reverse()) {
+      if (item.id === "prumo") continue;
+      const occ=(item.ocorrencias||[]).slice().reverse().find((oc)=>ocorrenciaStatus(oc,item)==="problema");
+      if (occ) return { item, oc: occ, sourceMontante:m };
+    }
+  }
+  return null;
+}
+function copyOccurrenceWithoutPhotos(oc) {
+  return normalizeOccurrence({ ...oc, id: uid(), fotos: [], foto: null, obs: oc.obs || "", status: "problema" }, null, "problema");
 }
 function resizeImage(file) {
   return new Promise((resolve, reject) => {
@@ -373,6 +477,8 @@ const state = {
   activeMontanteId: null,
   activeEstItemId: null,
   activeChecklistItemId: null,
+  itemDetailReturn: null,
+  draftOccurrence: null,
   draftVistoria: null,
   saveTimer: null,
 };
@@ -412,6 +518,7 @@ async function persistVistoriaList() {
   state.vistorias = (await idbGetAll("vistorias")).map(normalizeVistoria).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 function go(screen, vistoriaId = null, estruturaId = null, montanteId = null, estItemId = null, checklistItemId = null) {
+  if (screen !== "newAnomaly") state.draftOccurrence = null;
   state.screen = screen; state.activeVistoriaId = vistoriaId; state.activeEstruturaId = estruturaId; state.activeMontanteId = montanteId; state.activeEstItemId = estItemId; state.activeChecklistItemId = checklistItemId;
   render();
   window.scrollTo(0, 0);
@@ -429,7 +536,10 @@ function render() {
   const checklistItemAtual = montAtual && montAtual.itens.find((it) => it.id === state.activeChecklistItemId);
   const titles = {
     home: "Início", vistoria: "Inspeção", estrutura: (estAtual && estAtual.codigo) || "Nova estrutura",
-    montante: montAtual ? "Montante Nº " + montAtual.numero : "Montante",
+    montante: montAtual ? "Inspeção visual · Montante " + montAtual.numero : "Inspeção visual",
+    prumo: montAtual ? "Prumo · Montante " + montAtual.numero : "Prumo",
+    lux: "Iluminação / Lux",
+    newAnomaly: "Nova anomalia",
     itemDetail: checklistItemAtual ? checklistItemAtual.nome : "Item",
     estItem: estItemAtual ? estItemAtual.nome : "Item da estrutura",
     history: "Histórico", config: "Configurações",
@@ -443,7 +553,10 @@ function render() {
     vistoria: () => go("home"),
     estrutura: () => go("vistoria", state.draftVistoria.id),
     montante: () => go("estrutura", state.draftVistoria.id, state.activeEstruturaId),
-    itemDetail: () => go("montante", state.draftVistoria.id, state.activeEstruturaId, state.activeMontanteId),
+    prumo: () => go("estrutura", state.draftVistoria.id, state.activeEstruturaId),
+    lux: () => go("estrutura", state.draftVistoria.id, state.activeEstruturaId),
+    newAnomaly: () => go("montante", state.draftVistoria.id, state.activeEstruturaId, state.activeMontanteId),
+    itemDetail: () => state.itemDetailReturn === "prumo" ? go("prumo", state.draftVistoria.id, state.activeEstruturaId, state.activeMontanteId) : go("montante", state.draftVistoria.id, state.activeEstruturaId, state.activeMontanteId),
     estItem: () => go("estrutura", state.draftVistoria.id, state.activeEstruturaId),
     history: () => go("home"),
     config: () => go("home"),
@@ -460,6 +573,9 @@ function render() {
   if (state.screen === "vistoria") body.appendChild(VistoriaScreen());
   if (state.screen === "estrutura") body.appendChild(EstruturaScreen());
   if (state.screen === "montante") body.appendChild(MontanteScreen());
+  if (state.screen === "prumo") body.appendChild(PrumoScreen());
+  if (state.screen === "lux") body.appendChild(LuxScreen());
+  if (state.screen === "newAnomaly") body.appendChild(NewAnomalyScreen());
   if (state.screen === "itemDetail") body.appendChild(ItemDetailScreen());
   if (state.screen === "estItem") body.appendChild(EstruturaItemScreen());
   if (state.screen === "history") body.appendChild(HistoryScreen());
@@ -470,7 +586,8 @@ function render() {
   if (state.screen === "painel") body.appendChild(PainelScreen());
   if (state.screen === "anomalias") body.appendChild(AnomaliasScreen());
   app.appendChild(body);
-  app.appendChild(BottomNav());
+  const fieldScreens = ["montante", "prumo", "lux", "newAnomaly", "itemDetail"];
+  if (!fieldScreens.includes(state.screen)) app.appendChild(BottomNav());
 }
 
 function TopBar(title, onBack) {
@@ -486,7 +603,7 @@ function BottomNav() {
   ];
   const nav = el("div", { class: "bottomnav no-print" });
   items.forEach(([id, label, icon]) => {
-    const active = id === state.screen || (id === "vistoria" && ["estrutura", "montante", "estItem", "itemDetail"].includes(state.screen)) || (id === "history" && ["hub", "report", "partsInspection", "anomalias", "painel"].includes(state.screen));
+    const active = id === state.screen || (id === "vistoria" && ["estrutura", "montante", "prumo", "lux", "newAnomaly", "estItem", "itemDetail"].includes(state.screen)) || (id === "history" && ["hub", "report", "partsInspection", "anomalias", "painel"].includes(state.screen));
     const btn = el("button", { class: active ? "active" : "", onclick: () => go(id === "vistoria" ? "vistoria" : id) },
       el("span", { html: svg(icon, 20) }), el("span", { class: "label" }, label));
     nav.appendChild(btn);
@@ -548,6 +665,41 @@ function suggestInput(value, onChange, placeholder, options) {
   return wrap;
 }
 
+
+async function resumeVistoria(v) {
+  const loaded = await idbGet("vistorias", v.id);
+  state.draftVistoria = normalizeVistoria(loaded || v);
+  const r = state.draftVistoria.resume;
+  if (!r || !r.estruturaId) return go("vistoria", v.id);
+  const e = (state.draftVistoria.estruturas || []).find((x)=>x.id===r.estruturaId);
+  if (!e) return go("vistoria", v.id);
+  if (r.mode === "visual") {
+    let m=(e.montantes||[]).find((x)=>x.id===r.montanteId);
+    if (!m) m=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero).find((x)=>!visualMontanteDone(x,e));
+    if (!m && !e.visualFinalizada) m=addNextMontante(e);
+    if (m) { await saveVistoriaNow(); return go("montante",v.id,e.id,m.id); }
+  }
+  if (r.mode === "prumo") {
+    let m=(e.montantes||[]).find((x)=>x.id===r.montanteId) || (e.montantes||[]).find((x)=>!prumoDone(x));
+    if (m) return go("prumo",v.id,e.id,m.id);
+  }
+  if (r.mode === "lux") return go("lux",v.id,e.id);
+  go("estrutura",v.id,e.id);
+}
+function ResumeCard(v) {
+  const r=v.resume || {};
+  const e=(v.estruturas||[]).find((x)=>x.id===r.estruturaId);
+  if (!e) return null;
+  const m=(e.montantes||[]).find((x)=>x.id===r.montanteId);
+  const labels={visual:"Inspeção visual",prumo:"Prumo",lux:"Iluminação / Lux"};
+  const card=Card({class:"resume-card",style:"margin-bottom:14px"});
+  card.appendChild(el("div",{class:"resume-kicker"},"CONTINUAR DE ONDE PAROU"));
+  card.appendChild(el("div",{class:"resume-title"},v.lojaCd||"Inspeção em andamento"));
+  card.appendChild(el("div",{class:"resume-sub"},[labels[r.mode]||"Inspeção",`Estrutura ${e.codigo||"—"}`,m&&`Montante ${m.numero}`].filter(Boolean).join(" · ")));
+  const b=el("button",{class:"field-primary-btn"},"▶ Continuar"); b.addEventListener("click",()=>resumeVistoria(v)); card.appendChild(b);
+  return card;
+}
+
 /* ---------------- Home ---------------- */
 function HomeScreen() {
   const wrap = el("div", { class: "screen" });
@@ -558,6 +710,9 @@ function HomeScreen() {
   wrap.appendChild(el("div", { style: "margin-bottom:18px" },
     el("img", { src: "logo-full.png", alt: state.config.empresa, style: "height:34px;display:block;margin-bottom:8px" }),
     el("h2", { style: "font-size:26px;margin-top:2px" }, "Inspeção de Porta-Pallets")));
+
+  const latestResume = rascunhos.find((v)=>v.resume && v.resume.estruturaId);
+  if (latestResume) { const rc=ResumeCard(latestResume); if(rc) wrap.appendChild(rc); }
 
   wrap.appendChild(el("button", { class: "cta", onclick: () => go("vistoria") },
     el("span", { style: "display:flex;align-items:center;gap:10px" }, el("span", { html: svg("building", 20) }), "Nova inspeção"),
@@ -634,7 +789,7 @@ function newEstruturaSkeleton(previous = null) {
   return {
     id: uid(), codigo: "", setor: previous ? previous.setor || "" : "", tipoEstrutura: previous ? previous.tipoEstrutura || "" : "",
     rua: previous ? previous.rua || "" : "", lado: previous ? previous.lado || "" : "", modulos: "",
-    fabricante: previous ? previous.fabricante || "" : "", observacoesGerais: "", finalizada: false, resolvido: false,
+    fabricante: previous ? previous.fabricante || "" : "", observacoesGerais: "", finalizada: false, visualFinalizada: false, prumoFinalizada: false, luxFinalizada: false, resolvido: false,
     montantes: [], itensEstrutura: itensEstruturaCatalogo(state.config).map(newEstruturaItemRuntime),
   };
 }
@@ -656,17 +811,9 @@ function addNextMontante(e) {
   e.montantes.push(m);
   return m;
 }
-function completeMontanteAsInspected(m) {
-  (m.itens || []).forEach((it) => {
-    if (montanteItemStatus(it) !== "pendente") return;
-    if (it.id === "prumo") {
-      it.ocorrencias = [normalizeOccurrence({ ...newOcorrencia("ok"), descTxt: "COLUNA NA TOLERÂNCIA DO PRUMO", localTxt: "LONGITUDINAL / TRANSVERSAL", status: "ok" }, it, "ok")];
-    }
-    it.revisado = true;
-    it.status = "ok";
-    syncMontanteItemStatus(it);
-  });
-  m.inspecionadoAt = new Date().toISOString();
+function completeMontanteAsInspected(m, e = null) {
+  // Compatibilidade interna: a partir da v2.16, “inspecionado” nesta etapa significa somente inspeção visual.
+  completeMontanteVisualAsInspected(m, e);
 }
 function montanteHasActivity(m) {
   return Boolean((m.tipoMontante || "").trim() || (m.observacoes || "").trim() || (m.itens || []).some((it) => montanteItemStatus(it) !== "pendente" || (it.ocorrencias || []).length));
@@ -763,6 +910,17 @@ function VistoriaScreen() {
   header.appendChild(el("div", { id: "save-indicator", class: "save-indicator" }, "✓ Salvo no aparelho"));
   inner.appendChild(header);
 
+  const sum=inspectionStageSummary(v);
+  const visualStructures=(v.estruturas||[]).filter((e)=>visualProgress(e).complete).length;
+  const prumoStructures=(v.estruturas||[]).filter((e)=>prumoProgress(e).complete).length;
+  const luxStructures=(v.estruturas||[]).filter((e)=>luxProgress(e).complete).length;
+  const overview=Card({class:"inspection-stage-overview",style:"margin-bottom:14px"});
+  overview.appendChild(el("div",{class:"overview-head"},el("div",{},el("div",{class:"overview-kicker"},"ANDAMENTO DA INSPEÇÃO"),el("div",{class:"overview-title"},`${sum.estruturas} estrutura${sum.estruturas===1?"":"s"} · ${sum.montantes} montantes conhecidos`))));
+  const stageMini=el("div",{class:"stage-mini-grid"});
+  [["Visual",visualStructures,sum.estruturas],["Prumo",prumoStructures,sum.estruturas],["Lux",luxStructures,sum.estruturas]].forEach(([label,done,total])=>stageMini.appendChild(el("div",{class:"stage-mini"},el("strong",{},`${done}/${total||0}`),el("span",{},label))));overview.appendChild(stageMini);
+  if(v.resume&&v.resume.estruturaId){const b=el("button",{class:"overview-resume-btn"},"▶ Continuar de onde parei");b.addEventListener("click",()=>resumeVistoria(v));overview.appendChild(b);}
+  inner.appendChild(overview);
+
   const estHead = el("div", { style: "display:flex;align-items:center;justify-content:space-between;margin-bottom:8px" },
     el("h3", { class: "section-title", style: "margin:0" }, `Estruturas (${(v.estruturas || []).length})`));
   inner.appendChild(estHead);
@@ -805,16 +963,12 @@ function VistoriaScreen() {
   return wrap;
 }
 function EstruturaRow(e, v) {
-  const st = estruturaStatus(e);
-  const nMont = (e.montantes || []).length;
-  const row = el("div", { class: "insp-row", onclick: () => go("estrutura", v.id, e.id) },
-    el("div", {},
-      el("div", { class: "insp-code" }, e.codigo || "(sem código ainda)"),
-      el("div", { class: "insp-sub" }, [e.rua && "Rua " + e.rua, e.lado && "Lado " + e.lado, nMont + " montante" + (nMont === 1 ? "" : "s")].filter(Boolean).join(" · "))),
-    el("div", { style: "display:flex;align-items:center;gap:8px" },
-      Tag(st, "sm"),
-      (() => { const b = el("button", { style: "background:none;border:none;color:var(--ink-faint)", html: svg("trash", 15) }); b.addEventListener("click", (ev) => { ev.stopPropagation(); if (confirm("Remover esta estrutura da vistoria?")) { v.estruturas = v.estruturas.filter((x) => x.id !== e.id); saveVistoriaNow().then(render); } }); return b; })()));
-  return Card({ style: "padding:0;cursor:pointer" }, row);
+  const st=estruturaStatus(e);const nMont=(e.montantes||[]).length;const vp=visualProgress(e),pp=prumoProgress(e),lp=luxProgress(e);
+  const steps=[vp.complete?"Visual ✓":`Visual ${vp.done}/${vp.total}`,pp.complete?"Prumo ✓":`Prumo ${pp.done}/${pp.total}`,lp.complete?"Lux ✓":(lp.measurements?`Lux ${lp.measurements} med.`:"Lux —")];
+  const row=el("div",{class:"insp-row",onclick:()=>go("estrutura",v.id,e.id)},
+    el("div",{},el("div",{class:"insp-code"},e.codigo||"(sem código ainda)"),el("div",{class:"insp-sub"},[e.rua&&"Rua "+e.rua,e.lado&&"Lado "+e.lado,nMont+" montante"+(nMont===1?"":"s")].filter(Boolean).join(" · ")),el("div",{class:"stage-inline"},steps.join("  ·  "))),
+    el("div",{style:"display:flex;align-items:center;gap:8px"},Tag(st,"sm"),(()=>{const b=el("button",{style:"background:none;border:none;color:var(--ink-faint)",html:svg("trash",15)});b.addEventListener("click",(ev)=>{ev.stopPropagation();if(confirm("Remover esta estrutura da vistoria?")){v.estruturas=v.estruturas.filter((x)=>x.id!==e.id);saveVistoriaNow().then(render);}});return b;})()));
+  return Card({style:"padding:0;cursor:pointer"},row);
 }
 function submitVistoria(v, errBox) {
   errBox.innerHTML = "";
@@ -826,10 +980,15 @@ function submitVistoria(v, errBox) {
   if (semCodigo) return showErr("Toda estrutura precisa de um código — falta preencher pelo menos uma.");
   const semMontante = v.estruturas.find((e) => !(e.montantes || []).length);
   if (semMontante) return showErr(`A estrutura ${semMontante.codigo || "sem código"} ainda não possui montantes inspecionados.`);
-  const pending = countPendingInspection(v);
-  if (pending.total) return showErr(`Ainda há ${pending.total} item(ns) pendente(s): ${pending.itens} em ${pending.montantes} montante(s) e ${pending.estruturaItens} item(ns) de estrutura. Revise-os antes de concluir.`);
+  const visualAberta = v.estruturas.find((e)=>!visualProgress(e).complete);
+  if (visualAberta) return showErr(`A inspeção visual da estrutura ${visualAberta.codigo || "—"} ainda não foi encerrada.`);
+  const prumoPendente = v.estruturas.find((e)=>!prumoProgress(e).complete);
+  if (prumoPendente) { const p=prumoProgress(prumoPendente); return showErr(`Prumo pendente na estrutura ${prumoPendente.codigo || "—"}: ${p.done}/${p.total} montantes medidos.`); }
+  const luxPendente = v.estruturas.find((e)=>!luxProgress(e).complete);
+  if (luxPendente) return showErr(`A etapa de iluminação/Lux da estrutura ${luxPendente.codigo || "—"} ainda não foi finalizada.`);
   v.finalizada = true;
   v.finalizadaAt = new Date().toISOString();
+  delete v.resume;
   idbSet("vistorias", undefined, v).then(async () => {
     await persistVistoriaList();
     const id = v.id;
@@ -839,110 +998,90 @@ function submitVistoria(v, errBox) {
 }
 
 /* ---------------- Estrutura (checklist 9.x) ---------------- */
+function StageWorkflowCard(kind, title, main, sub, buttonLabel, onClick, opts = {}) {
+  const card=Card({class:`workflow-card workflow-${kind}${opts.complete?" is-complete":""}${opts.disabled?" is-disabled":""}`});
+  const head=el("div",{class:"workflow-head"},
+    el("div",{},el("div",{class:"workflow-kicker"},opts.kicker||"ETAPA"),el("div",{class:"workflow-title"},title)),
+    opts.complete ? Tag("ok","sm","Concluída") : opts.problem ? Tag("problema","sm",opts.problem) : Tag("pendente","sm",opts.statusLabel||"Em andamento"));
+  card.appendChild(head);
+  card.appendChild(el("div",{class:"workflow-main"},main));
+  card.appendChild(el("div",{class:"workflow-sub"},sub));
+  const b=el("button",{class:"workflow-btn"+(opts.primary?" primary":"")},buttonLabel);
+  b.disabled=Boolean(opts.disabled); if(opts.disabled)b.setAttribute("aria-disabled","true");
+  b.addEventListener("click",()=>{if(!opts.disabled)onClick();}); card.appendChild(b);
+  return card;
+}
 function EstruturaScreen() {
-  const wrap = el("div", { style: "padding-bottom:96px" });
-  const inner = el("div", { class: "screen", style: "padding-top:16px" });
+  const wrap = el("div", { style: "padding-bottom:86px" });
+  const inner = el("div", { class: "screen structure-screen", style: "padding-top:14px" });
   wrap.appendChild(inner);
+  const v=state.draftVistoria;
+  if(!v){inner.appendChild(el("div",{class:"empty"},"Carregando…"));return wrap;}
+  const e=(v.estruturas||[]).find((x)=>x.id===state.activeEstruturaId);
+  if(!e){inner.appendChild(el("div",{class:"empty"},"Estrutura não encontrada."));return wrap;}
 
-  const v = state.draftVistoria;
-  if (!v) { inner.appendChild(el("div", { class: "empty" }, "Carregando…")); return wrap; }
-  const e = (v.estruturas || []).find((x) => x.id === state.activeEstruturaId);
-  if (!e) { inner.appendChild(el("div", { class: "empty" }, "Estrutura não encontrada.")); return wrap; }
+  const totalAnom=montanteProblemEntries(e).length+estruturaProblemOccurrences(e).length;
+  const vp=visualProgress(e), pp=prumoProgress(e), lp=luxProgress(e);
+  const summary=Card({class:"structure-summary",style:"margin-bottom:10px"});
+  summary.appendChild(el("div",{class:"structure-summary-row"},
+    el("div",{},el("div",{class:"structure-code"},e.codigo||"Nova estrutura"),el("div",{class:"structure-sub"},[e.rua&&`Rua ${e.rua}`,e.lado,e.setor,e.fabricante].filter(Boolean).join(" · "))),
+    el("div",{class:"structure-anom"},el("strong",{},String(totalAnom)),el("span",{},"anom."))));
+  const details=el("details",{class:"structure-details",open:e.codigo?null:""});
+  details.appendChild(el("summary",{},"Editar dados da estrutura"));
+  const edit=el("div",{class:"structure-edit-body"});
+  edit.appendChild(Field("Código da estrutura",inputEl(e.codigo,(val)=>{e.codigo=val;saveVistoriaDebounced();},"Ex: E-01 / Rua 03")));
+  edit.appendChild(el("div",{class:"row2"},
+    (()=>{const fw=el("div",{class:"field"},el("label",{},"Setor"));fw.appendChild(suggestInput(e.setor,(val)=>{e.setor=val;saveVistoriaDebounced();},"Digite o setor",state.config.setores));return fw;})(),
+    (()=>{const fw=el("div",{class:"field"},el("label",{},"Tipo de estrutura"));fw.appendChild(suggestInput(e.tipoEstrutura,(val)=>{e.tipoEstrutura=val;saveVistoriaDebounced();},"Digite o tipo",state.config.tiposEstrutura));return fw;})()));
+  edit.appendChild(el("div",{class:"row2"},Field("Rua",inputEl(e.rua,(val)=>{e.rua=val;saveVistoriaDebounced();},"Ex: 03")),Field("Lado",inputEl(e.lado,(val)=>{e.lado=val;saveVistoriaDebounced();},"Ex: direito / ímpar"))));
+  edit.appendChild(el("div",{class:"row2"},
+    (()=>{const fw=el("div",{class:"field"},el("label",{},"Qtd. estimada (opcional)"));fw.appendChild(inputEl(e.qtdEstimada||"",(val)=>{e.qtdEstimada=val;saveVistoriaDebounced();},"Pode deixar em branco","number"));return fw;})(),
+    (()=>{const fw=el("div",{class:"field"},el("label",{},"Fabricante padrão"));fw.appendChild(suggestInput(e.fabricante,(val)=>{e.fabricante=val;saveVistoriaDebounced();},"Digite o fabricante",state.config.fabricantes));return fw;})()));
+  const obs=el("textarea",{class:"input",rows:3,placeholder:"Altura, particularidades, interferências, adaptações..."});obs.value=e.observacoesGerais||"";obs.addEventListener("input",(ev)=>{e.observacoesGerais=ev.target.value;saveVistoriaDebounced();});edit.appendChild(el("div",{class:"field"},el("label",{},"Observações gerais"),obs));
+  edit.appendChild(el("div",{id:"save-indicator",class:"save-indicator"},"✓ Salvo no aparelho"));
+  details.appendChild(edit);summary.appendChild(details);inner.appendChild(summary);
 
-  const header = Card({ class: "structure-header", style: "margin-bottom:14px" });
-  header.appendChild(Field("Código da estrutura", inputEl(e.codigo, (val) => { e.codigo = val; saveVistoriaDebounced(); }, "Ex: E-01 / Rua 03")));
-  header.appendChild(el("div", { class: "row2" },
-    (() => { const fw=el("div",{class:"field"},el("label",{},"Setor")); const frag=suggestInput(e.setor,(val)=>{e.setor=val;saveVistoriaDebounced();},"Digite o setor",state.config.setores); fw.appendChild(frag); return fw; })(),
-    (() => { const fw=el("div",{class:"field"},el("label",{},"Tipo de estrutura")); const frag=suggestInput(e.tipoEstrutura,(val)=>{e.tipoEstrutura=val;saveVistoriaDebounced();},"Digite o tipo",state.config.tiposEstrutura); fw.appendChild(frag); return fw; })()));
-  header.appendChild(el("div", { class: "row2" },
-    Field("Rua", inputEl(e.rua, (val) => { e.rua = val; saveVistoriaDebounced(); }, "Ex: 03")),
-    Field("Lado", inputEl(e.lado, (val) => { e.lado = val; saveVistoriaDebounced(); }, "Ex: direito / ímpar"))));
-  header.appendChild(el("div", { class: "row2" },
-    (() => { const fw=el("div",{class:"field"},el("label",{},"Qtd. estimada (opcional)")); const inp=inputEl(e.qtdEstimada || "",(val)=>{e.qtdEstimada=val;saveVistoriaDebounced();},"Pode deixar em branco","number"); fw.appendChild(inp); return fw; })(),
-    (() => { const fw=el("div",{class:"field"},el("label",{},"Fabricante padrão")); const frag=suggestInput(e.fabricante,(val)=>{e.fabricante=val;saveVistoriaDebounced();},"Digite o fabricante",state.config.fabricantes); fw.appendChild(frag); return fw; })()));
-  const obs = el("textarea", { class: "input", rows: 3, placeholder: "Contexto geral da estrutura: altura, particularidades, interferências, adaptações..." });
-  obs.value = e.observacoesGerais || "";
-  obs.addEventListener("input", (ev) => { e.observacoesGerais = ev.target.value; saveVistoriaDebounced(); });
-  header.appendChild(el("div", { class: "field" }, el("label", {}, "Observações gerais da estrutura"), obs));
-  header.appendChild(el("div", { id: "save-indicator", class: "save-indicator" }, "✓ Salvo no aparelho"));
-  inner.appendChild(header);
+  inner.appendChild(el("div",{class:"stage-intro"},el("h3",{},"Etapas de campo"),el("p",{},"Faça cada passagem com o equipamento e o foco daquela etapa.")));
+  const stages=el("div",{class:"workflow-grid"});
+  stages.appendChild(StageWorkflowCard("visual","1 · Inspeção visual",`${vp.done} montante${vp.done===1?"":"s"} revisado${vp.done===1?"":"s"}`,e.visualFinalizada?`${vp.total} montantes definidos · ${totalAnom} anomalias registradas`:"O total é descoberto conforme você avança.",e.visualFinalizada?"Reabrir inspeção visual":(vp.total?"▶ Continuar inspeção visual":"▶ Iniciar inspeção visual"),async()=>{
+    if(e.visualFinalizada){if(!confirm("Reabrir a inspeção visual desta estrutura?"))return;e.visualFinalizada=false;delete e.visualFinalizadaAt;}
+    let target=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero).find((m)=>!visualMontanteDone(m,e));
+    if(!target){const ordered=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero);target=ordered.length?ordered[ordered.length-1]:addNextMontante(e);}
+    setResume(v,"visual",e,target);await saveVistoriaNow();go("montante",v.id,e.id,target.id);
+  },{complete:e.visualFinalizada,primary:true,kicker:"SEM EQUIPAMENTO DE MEDIÇÃO"}));
+  stages.appendChild(StageWorkflowCard("prumo","2 · Prumo",pp.total?`${pp.done} / ${pp.total} montantes medidos`:"Aguardando inspeção visual",pp.problems?`${pp.problems} montante(s) fora de tolerância`:"Medição em passagem separada com o laser",pp.complete?"Revisar medições de prumo":"▶ Iniciar / continuar prumo",async()=>{
+    let target=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero).find((m)=>!prumoDone(m));
+    if(!target)target=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero)[0];
+    if(!target)return; e.prumoFinalizada=false; setResume(v,"prumo",e,target);await saveVistoriaNow();go("prumo",v.id,e.id,target.id);
+  },{complete:pp.complete,disabled:!e.visualFinalizada||!pp.total,problem:pp.problems?`${pp.problems} fora`:null,kicker:"LASER"}));
+  stages.appendChild(StageWorkflowCard("lux","3 · Iluminação / Lux",lp.measurements?`${lp.measurements} aferição${lp.measurements===1?"":"ões"}`:"Nenhuma aferição",lp.problems?`${lp.problems} abaixo do limite mínimo`:e.luxFinalizada?"Etapa encerrada":"Uma ou mais aferições por estrutura, conforme necessário.",e.luxFinalizada?"Revisar aferições":"▶ Medir iluminação",async()=>{setResume(v,"lux",e);await saveVistoriaNow();go("lux",v.id,e.id);},{complete:lp.complete,disabled:!e.visualFinalizada,problem:lp.problems?`${lp.problems} baixa`:null,kicker:"LUXÍMETRO"}));
+  inner.appendChild(stages);
 
-  const totalM = (e.montantes || []).length;
-  const totalAnom = montanteProblemEntries(e).length + estruturaProblemOccurrences(e).length;
-  const campo = Card({ class: "field-mode-card", style: "margin-bottom:14px" });
-  campo.appendChild(el("div", { class: "field-mode-kicker" }, "MODO CAMPO"));
-  campo.appendChild(el("div", { class: "field-mode-stats" },
-    el("div", {}, el("strong", {}, String(totalM)), el("span", {}, " montantes")),
-    el("div", {}, el("strong", {}, String(totalAnom)), el("span", {}, " anomalias"))));
-  const startBtn = el("button", { class: "field-primary-btn" }, totalM ? "▶ Continuar inspeção dos montantes" : "▶ Iniciar inspeção dos montantes");
-  startBtn.addEventListener("click", async () => {
-    let target = (e.montantes || []).slice().sort((a,b)=>a.numero-b.numero).find((m) => (m.itens || []).some((it) => montanteItemStatus(it) === "pendente"));
-    if (!target) { const ordered=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero); target = totalM ? ordered[ordered.length - 1] : addNextMontante(e); }
-    await saveVistoriaNow();
-    go("montante", v.id, e.id, target.id);
-  });
-  campo.appendChild(startBtn);
-  campo.appendChild(el("div", { class: "field-mode-hint" }, "O total não precisa ser conhecido antecipadamente. O próximo montante é criado conforme o técnico avança."));
-  inner.appendChild(campo);
-
-  if ((e.itensEstrutura || []).length) {
-    if (!(e.id in estItemsCollapseState)) estItemsCollapseState[e.id] = true;
-    const collapsed = estItemsCollapseState[e.id];
-    const estOverall = overallStatus(e.itensEstrutura.map((it) => ({ status: estruturaEstItemStatus(it) })));
-    const estHeader = el("div", { class: "card section-toggle" },
-      el("div", {}, el("div", { style: "font-weight:700;font-size:13.5px" }, "Itens da estrutura"), el("div", { class: "insp-sub" }, "Avaliados uma vez por estrutura")),
-      el("div", { style: "display:flex;align-items:center;gap:8px" }, Tag(estOverall, "sm"), el("span", { html: svg("chevronRight", 16, collapsed ? "" : "transform:rotate(90deg)") })));
-    estHeader.addEventListener("click", () => { estItemsCollapseState[e.id] = !estItemsCollapseState[e.id]; render(); });
-    inner.appendChild(estHeader);
-    if (!collapsed) {
-      const estList = el("div", { style: "display:flex;flex-direction:column;gap:8px;margin:8px 0 18px" });
-      e.itensEstrutura.forEach((it) => estList.appendChild(EstruturaItemRow(it, e, v)));
-      inner.appendChild(estList);
-    }
+  const visEstItems=visualStructureItems(e);
+  if(visEstItems.length){
+    if(!(e.id in estItemsCollapseState))estItemsCollapseState[e.id]=true;
+    const collapsed=estItemsCollapseState[e.id];
+    const estOverall=overallStatus(visEstItems.map((it)=>({status:estruturaEstItemStatus(it)})));
+    const estHeader=el("div",{class:"card section-toggle",style:"margin-top:14px"},el("div",{},el("div",{style:"font-weight:700;font-size:14px"},"Itens visuais da estrutura"),el("div",{class:"insp-sub"},"Layout, luminárias, piso e condições gerais")),el("div",{style:"display:flex;align-items:center;gap:8px"},Tag(estOverall,"sm"),el("span",{html:svg("chevronRight",16,collapsed?"":"transform:rotate(90deg)")})));
+    estHeader.addEventListener("click",()=>{estItemsCollapseState[e.id]=!estItemsCollapseState[e.id];render();});inner.appendChild(estHeader);
+    if(!collapsed){const list=el("div",{style:"display:flex;flex-direction:column;gap:8px;margin:8px 0 16px"});visEstItems.forEach((it)=>list.appendChild(EstruturaItemRow(it,e,v)));inner.appendChild(list);}
   }
 
-  const montHead = el("div", { style: "display:flex;align-items:baseline;justify-content:space-between;margin:14px 0 10px" },
-    el("h3", { class: "section-title", style: "margin:0" }, `Montantes inspecionados (${totalM})`));
-  inner.appendChild(montHead);
-
-  if (totalM) {
-    const jumpRow = el("div", { class: "row", style: "margin-bottom:10px" });
-    const jumpInput = el("input", { class: "input", type: "number", inputmode: "numeric", placeholder: "Ir para o Nº..." });
-    const jumpBtn = el("button", { class: "ghost-btn touch-btn" }, "Ir");
-    const doJump = () => { const n=parseInt(jumpInput.value,10); const alvo=(e.montantes||[]).find((m)=>m.numero===n); if(alvo) go("montante",v.id,e.id,alvo.id); else alert("Montante Nº "+n+" não encontrado nesta estrutura."); };
-    jumpBtn.addEventListener("click",doJump); jumpInput.addEventListener("keydown",(ev)=>{if(ev.key==="Enter")doJump();}); jumpRow.appendChild(jumpInput);jumpRow.appendChild(jumpBtn);inner.appendChild(jumpRow);
-
-    let filtro="todos", visivel=100;
-    const filterRow=el("div",{class:"chip-row"}); const montList=el("div",{style:"display:flex;flex-direction:column;gap:8px"}); const loadMoreWrap=el("div",{style:"margin-top:10px"});
-    const filtros=[["todos","Todos"],["pendente","Pendentes"],["problema","Com anomalia"],["ok","Conforme"]];
-    function passaFiltro(m){ const sts=(m.itens||[]).map(montanteItemStatus); if(filtro==="todos")return true; if(filtro==="pendente")return sts.includes("pendente"); if(filtro==="problema")return sts.includes("problema"); if(filtro==="ok")return sts.length&&sts.every((x)=>x==="ok"||x==="naoaplica"); return true; }
-    function refreshList(){ filterRow.innerHTML=""; filtros.forEach(([key,label])=>{const chip=el("button",{class:"chip"+(filtro===key?" active":"")},label);chip.addEventListener("click",()=>{filtro=key;visivel=100;refreshList();});filterRow.appendChild(chip);}); const filtrados=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero).filter(passaFiltro); montList.innerHTML=""; filtrados.slice(0,visivel).forEach((m)=>montList.appendChild(MontanteRow(m,e,v))); loadMoreWrap.innerHTML=""; if(filtrados.length>visivel){const more=el("button",{class:"ghost-btn touch-btn",style:"width:100%"},`Carregar mais (${Math.min(visivel,filtrados.length)} de ${filtrados.length})`);more.addEventListener("click",()=>{visivel+=100;refreshList();});loadMoreWrap.appendChild(more);} if(!filtrados.length)montList.appendChild(el("div",{class:"card empty"},"Nenhum montante nesse filtro.")); }
-    refreshList(); inner.appendChild(filterRow); inner.appendChild(montList); inner.appendChild(loadMoreWrap);
-  } else {
-    inner.appendChild(el("div", { class: "card empty" }, "Nenhum montante ainda. Use “Iniciar inspeção dos montantes”."));
+  if(vp.total){
+    inner.appendChild(el("h3",{class:"section-title",style:"margin-top:16px"},`Montantes (${vp.total})`));
+    const jumpRow=el("div",{class:"row",style:"margin-bottom:10px"});const jumpInput=el("input",{class:"input",type:"number",inputmode:"numeric",placeholder:"Ir para o Nº..."});const jumpBtn=el("button",{class:"ghost-btn touch-btn"},"Ir");
+    const doJump=()=>{const n=parseInt(jumpInput.value,10);const alvo=(e.montantes||[]).find((m)=>m.numero===n);if(alvo){setResume(v,"visual",e,alvo);saveVistoriaNow().then(()=>go("montante",v.id,e.id,alvo.id));}else alert("Montante Nº "+n+" não encontrado nesta estrutura.");};jumpBtn.addEventListener("click",doJump);jumpInput.addEventListener("keydown",(ev)=>{if(ev.key==="Enter")doJump();});jumpRow.appendChild(jumpInput);jumpRow.appendChild(jumpBtn);inner.appendChild(jumpRow);
+    let filtro="todos",visivel=100;const filterRow=el("div",{class:"chip-row"});const montList=el("div",{style:"display:flex;flex-direction:column;gap:8px"});const loadMoreWrap=el("div",{style:"margin-top:10px"});const filtros=[["todos","Todos"],["pendente","Pendentes"],["problema","Com anomalia"],["ok","Conforme"]];
+    function passaFiltro(m){const st=visualMontanteStatus(m,e);return filtro==="todos"||st===filtro;}
+    function refreshList(){filterRow.innerHTML="";filtros.forEach(([key,label])=>{const chip=el("button",{class:"chip"+(filtro===key?" active":"")},label);chip.addEventListener("click",()=>{filtro=key;visivel=100;refreshList();});filterRow.appendChild(chip);});const filtrados=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero).filter(passaFiltro);montList.innerHTML="";filtrados.slice(0,visivel).forEach((m)=>montList.appendChild(MontanteRow(m,e,v)));loadMoreWrap.innerHTML="";if(filtrados.length>visivel){const more=el("button",{class:"ghost-btn touch-btn",style:"width:100%"},`Carregar mais (${Math.min(visivel,filtrados.length)} de ${filtrados.length})`);more.addEventListener("click",()=>{visivel+=100;refreshList();});loadMoreWrap.appendChild(more);}if(!filtrados.length)montList.appendChild(el("div",{class:"card empty"},"Nenhum montante nesse filtro."));}
+    refreshList();inner.appendChild(filterRow);inner.appendChild(montList);inner.appendChild(loadMoreWrap);
   }
 
-  if (totalM) {
-    const finish = el("button", { class: "ghost-btn touch-btn", style: "width:100%;margin-top:14px" }, e.finalizada ? "✓ Estrutura finalizada — reabrir" : "Finalizar esta estrutura");
-    finish.addEventListener("click", async () => {
-      if (!e.finalizada) {
-        const p = estruturaItensFlat(e).filter((x)=>x.status==="pendente").length;
-        if (p) { alert(`Ainda há ${p} item(ns) pendente(s) nesta estrutura. Revise antes de finalizar.`); return; }
-        e.finalizada = true; e.finalizadaAt = new Date().toISOString();
-      } else { e.finalizada = false; delete e.finalizadaAt; }
-      await saveVistoriaNow(); render();
-    });
-    inner.appendChild(finish);
-    if (!e.finalizada) {
-      const finishNext=el("button",{class:"field-primary-btn",style:"margin-top:8px"},"✓ Finalizar estrutura e criar próxima");
-      finishNext.addEventListener("click",async()=>{const p=estruturaItensFlat(e).filter((x)=>x.status==="pendente").length;if(p){alert(`Ainda há ${p} item(ns) pendente(s) nesta estrutura. Revise antes de finalizar.`);return;}e.finalizada=true;e.finalizadaAt=new Date().toISOString();const nova=newEstruturaSkeleton(e);v.estruturas.push(nova);await saveVistoriaNow();go("estrutura",v.id,nova.id);});
-      inner.appendChild(finishNext);
-    }
+  if(e.visualFinalizada){
+    const next=el("button",{class:"field-primary-btn",style:"margin-top:14px"},"＋ Criar próxima estrutura");
+    next.addEventListener("click",async()=>{const nova=newEstruturaSkeleton(e);v.estruturas.push(nova);await saveVistoriaNow();go("estrutura",v.id,nova.id);});inner.appendChild(next);
   }
-
-  const submitWrap = el("div", { class: "sticky-submit no-print" }, el("button", { class: "submit-btn" }, "Voltar para a inspeção"));
-  submitWrap.querySelector("button").addEventListener("click", async () => { clearTimeout(state.saveTimer); await saveVistoriaNow(); go("vistoria", v.id); });
-  wrap.appendChild(submitWrap);
+  const submitWrap=el("div",{class:"sticky-submit no-print"},el("button",{class:"submit-btn"},"Voltar para a inspeção"));submitWrap.querySelector("button").addEventListener("click",async()=>{clearTimeout(state.saveTimer);await saveVistoriaNow();go("vistoria",v.id);});wrap.appendChild(submitWrap);
   return wrap;
 }
 function EstruturaItemRow(it, e, v) {
@@ -1011,10 +1150,9 @@ function OcorrenciaCard(oc, idx, it) {
   return card;
 }
 function MontanteRow(m, e, v) {
-  const sts=(m.itens||[]).map(montanteItemStatus);
-  const st=overallStatus(sts.map((status)=>({status})));
-  const nAnom=montanteProblemEntries({ ...e, montantes:[m] }).length;
-  const row=el("div",{class:"insp-row",onclick:()=>go("montante",v.id,e.id,m.id)},
+  const st=visualMontanteStatus(m,e);
+  const nAnom=montanteProblemEntries({ ...e, montantes:[m] }).filter(({item})=>item.id!=="prumo").length;
+  const row=el("div",{class:"insp-row",onclick:()=>{setResume(v,"visual",e,m);saveVistoriaNow().then(()=>go("montante",v.id,e.id,m.id));}},
     el("div",{},el("div",{class:"insp-code"},`Montante Nº ${m.numero}`),el("div",{class:"insp-sub"},[m.tipoMontante,m.fabricante,nAnom?`${nAnom} anomalia(s)`:""].filter(Boolean).join(" · "))),
     el("div",{style:"display:flex;align-items:center;gap:8px"},Tag(st,"sm"),el("span",{html:svg("chevronRight",16),style:"color:var(--ink-faint)"})));
   return Card({style:"padding:0;cursor:pointer"},row);
@@ -1043,7 +1181,6 @@ function FamilySection(familia, itensFamilia, e, m) {
       ev.stopPropagation();
       itensFamilia.forEach((it) => {
         if (montanteItemStatus(it) !== "pendente") return;
-        if (it.id === "prumo") it.ocorrencias = [normalizeOccurrence({ ...newOcorrencia("ok"), descTxt: "COLUNA NA TOLERÂNCIA DO PRUMO", localTxt: "LONGITUDINAL / TRANSVERSAL", status: "ok" }, it, "ok")];
         it.revisado = true; it.status = "ok"; syncMontanteItemStatus(it);
       });
       await saveVistoriaNow();
@@ -1064,72 +1201,123 @@ function ChecklistItemRow(item, e, m) {
   return Card({ style: "padding:0;margin-bottom:8px;cursor:pointer" }, row);
 }
 
-function MontanteScreen() {
-  const wrap = el("div", { class: "field-screen", style: "padding-bottom:118px" });
-  const inner = el("div", { class: "screen", style: "padding-top:12px" }); wrap.appendChild(inner);
-  const v=state.draftVistoria; const e=v&&(v.estruturas||[]).find((x)=>x.id===state.activeEstruturaId); const m=e&&(e.montantes||[]).find((x)=>x.id===state.activeMontanteId);
-  if(!v||!e||!m){inner.appendChild(el("div",{class:"empty"},"Montante não encontrado."));return wrap;}
-  (m.itens||[]).forEach(normalizeMontanteItem);
-  const anom=montanteProblemEntries({...e,montantes:[m]}).length;
-  const pend=(m.itens||[]).filter((it)=>montanteItemStatus(it)==="pendente").length;
+function startNewAnomaly(v,e,m,item,seed=null) {
+  const occurrence = normalizeOccurrence(seed ? copyOccurrenceWithoutPhotos(seed) : newOcorrencia("problema"), item, "problema");
+  occurrence.status = "problema";
+  state.draftOccurrence = { itemId:item.id, occurrence };
+  state.itemDetailReturn = null;
+  go("newAnomaly",v.id,e.id,m.id,null,item.id);
+}
+function NewAnomalyScreen() {
+  const wrap=el("div",{class:"screen field-form-screen",style:"padding-bottom:30px"});
+  const v=state.draftVistoria;const e=v&&(v.estruturas||[]).find((x)=>x.id===state.activeEstruturaId);const m=e&&(e.montantes||[]).find((x)=>x.id===state.activeMontanteId);const item=m&&(m.itens||[]).find((x)=>x.id===state.activeChecklistItemId);
+  if(!v||!e||!m||!item||!state.draftOccurrence){wrap.appendChild(el("div",{class:"empty"},"Registro temporário não encontrado."));return wrap;}
+  const oc=state.draftOccurrence.occurrence;
+  wrap.appendChild(el("div",{class:"field-context"},`Estrutura ${e.codigo||"—"} · Montante ${m.numero}`));
+  wrap.appendChild(el("div",{class:"item-title-large"},CodeBadge(item.codigo),item.nome));
+  wrap.appendChild(el("div",{class:"draft-banner"},"Rascunho — só entra na inspeção depois de Salvar anomalia."));
+  const card=Card({class:"occurrence-card",style:"margin-top:12px"});
+  if(item.descOpcoes)card.appendChild(Field("Descrição",suggestInput(oc.descTxt,(val)=>{oc.descTxt=val;},"Selecione ou digite",item.descOpcoes)));
+  if(item.tipoOpcoes)card.appendChild(Field("Tipo / componente",suggestInput(oc.tipoTxt,(val)=>{oc.tipoTxt=val;},"Tipo",item.tipoOpcoes)));
+  card.appendChild(Field("Nível",inputEl(oc.corte||"",(val)=>{oc.corte=val;},"Ex: 1, 3, 18")));
+  if(item.localOpcoes)card.appendChild(Field(item.localLabel||"Localização",suggestInput(oc.localTxt,(val)=>{oc.localTxt=val;},"Localização",item.localOpcoes)));
+  card.appendChild(Field("Grau",suggestInput(oc.grauTxt,(val)=>{oc.grauTxt=val;},"Leve, Médio, Grave, Gravíssimo",GRAU_OPCOES)));
+  card.appendChild(Field("Quantidade",inputEl(oc.qtd==null?1:oc.qtd,(val)=>{oc.qtd=val;},"1","number")));
+  const obs=el("textarea",{class:"input",rows:2,placeholder:"Observação (opcional)"});obs.value=oc.obs||"";obs.addEventListener("input",(ev)=>{oc.obs=ev.target.value;});card.appendChild(el("div",{class:"field"},el("label",{},"Observações"),obs));
+  const photos=el("div",{style:"margin-top:4px"});renderPhotoArea(photos,oc);card.appendChild(photos);wrap.appendChild(card);
+  const actions=el("div",{class:"draft-actions"});
+  const cancel=el("button",{class:"ghost-btn touch-btn"},"Cancelar");cancel.addEventListener("click",()=>{state.draftOccurrence=null;go("montante",v.id,e.id,m.id);});
+  const save=el("button",{class:"field-next-btn"},"✓ Salvar anomalia");save.addEventListener("click",async()=>{item.ocorrencias=item.ocorrencias||[];item.ocorrencias.push(normalizeOccurrence(oc,item,"problema"));item.status="problema";syncMontanteItemStatus(item);state.draftOccurrence=null;await saveVistoriaNow();go("montante",v.id,e.id,m.id);});
+  actions.appendChild(cancel);actions.appendChild(save);wrap.appendChild(actions);return wrap;
+}
 
-  const hero=Card({class:"montante-hero"});
-  hero.appendChild(el("div",{class:"montante-context"},`Estrutura ${e.codigo||"—"}${e.rua?" · Rua "+e.rua:""}${e.lado?" · "+e.lado:""}`));
+function MontanteScreen() {
+  const wrap=el("div",{class:"field-screen visual-field-screen",style:"padding-bottom:104px"});
+  const inner=el("div",{class:"screen",style:"padding-top:10px"});wrap.appendChild(inner);
+  const v=state.draftVistoria;const e=v&&(v.estruturas||[]).find((x)=>x.id===state.activeEstruturaId);const m=e&&(e.montantes||[]).find((x)=>x.id===state.activeMontanteId);
+  if(!v||!e||!m){inner.appendChild(el("div",{class:"empty"},"Montante não encontrado."));return wrap;}
+  (m.itens||[]).forEach(normalizeMontanteItem);setResume(v,"visual",e,m);
+  const visualItems=visualItemsMontante(m,e);const anom=montanteProblemEntries({...e,montantes:[m]}).filter(({item})=>item.id!=="prumo").length;const done=visualMontanteDone(m,e);
+  const ord=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero);const idx=ord.findIndex((x)=>x.id===m.id);const prev=ord[idx-1];const isLast=idx===ord.length-1;
+
+  const hero=Card({class:"montante-hero compact"});
+  hero.appendChild(el("div",{class:"montante-context"},`VISUAL · Estrutura ${e.codigo||"—"}${e.rua?" · Rua "+e.rua:""}${e.lado?" · "+e.lado:""}`));
   hero.appendChild(el("div",{class:"montante-number"},"MONTANTE ",el("strong",{},String(m.numero).padStart(3,"0"))));
-  hero.appendChild(el("div",{class:"montante-meta"},el("span",{},`${anom} anomalia(s)`),el("span",{},`${pend} pendente(s)`),el("span",{id:"save-indicator",class:"save-indicator"},"✓ Salvo")));
+  hero.appendChild(el("div",{class:"montante-meta"},el("span",{},anom?`${anom} anomalia(s)`:"sem anomalias registradas"),el("span",{},done?"✓ visual concluído":"em revisão"),el("span",{id:"save-indicator",class:"save-indicator"},"✓ salvo")));
   inner.appendChild(hero);
 
-  const context=Card({class:"context-card",style:"margin-top:10px"});
-  context.appendChild(el("div",{class:"row2"},
-    (()=>{const fw=el("div",{class:"field"},el("label",{},"Tipo / corte")); const frag=suggestInput(m.tipoMontante||"",(val)=>{m.tipoMontante=val;saveVistoriaDebounced();},"Ex: GÔNDOLA",["GÔNDOLA","CHÃO","LONGARINA MÓVEL","ÚLTIMO MONTANTE"]);fw.appendChild(frag);return fw;})(),
-    (()=>{const fw=el("div",{class:"field"},el("label",{},"Fabricante"));const frag=suggestInput(m.fabricante||e.fabricante||"",(val)=>{m.fabricante=val;saveVistoriaDebounced();},"Fabricante",state.config.fabricantes);fw.appendChild(frag);return fw;})()));
-  const obs=el("textarea",{class:"input",rows:2,placeholder:"Observação geral deste montante (opcional)"});obs.value=m.observacoes||"";obs.addEventListener("input",(ev)=>{m.observacoes=ev.target.value;saveVistoriaDebounced();});context.appendChild(el("div",{class:"field"},el("label",{},"Observações do montante"),obs));
-  inner.appendChild(context);
+  const context=el("details",{class:"card compact-details",style:"margin-top:9px"});
+  const chips=el("div",{class:"context-chips"},el("span",{class:"context-chip"},m.tipoMontante||"Tipo não informado"),el("span",{class:"context-chip"},m.fabricante||e.fabricante||"Fabricante não informado"));
+  context.appendChild(el("summary",{},chips,el("span",{class:"edit-hint"},"editar")));
+  const body=el("div",{class:"compact-details-body"});
+  body.appendChild(el("div",{class:"row2"},
+    (()=>{const fw=el("div",{class:"field"},el("label",{},"Tipo / corte"));fw.appendChild(suggestInput(m.tipoMontante||"",(val)=>{m.tipoMontante=val;saveVistoriaDebounced();},"Ex: GÔNDOLA",["GÔNDOLA","CHÃO","LONGARINA MÓVEL","ÚLTIMO MONTANTE"]));return fw;})(),
+    (()=>{const fw=el("div",{class:"field"},el("label",{},"Fabricante"));fw.appendChild(suggestInput(m.fabricante||e.fabricante||"",(val)=>{m.fabricante=val;saveVistoriaDebounced();},"Fabricante",state.config.fabricantes));return fw;})()));
+  const obs=el("textarea",{class:"input",rows:2,placeholder:"Observação geral deste montante (opcional)"});obs.value=m.observacoes||"";obs.addEventListener("input",(ev)=>{m.observacoes=ev.target.value;saveVistoriaDebounced();});body.appendChild(el("div",{class:"field"},el("label",{},"Observação do montante"),obs));context.appendChild(body);inner.appendChild(context);
 
-  const quick=el("div",{class:"quick-action-grid"});
+  const quick=el("div",{class:"quick-action-grid visual-actions"});
   const btnAnom=el("button",{class:"quick-anomaly-btn"},el("span",{html:svg("alert",20)}),el("span",{},"Registrar anomalia"));
-  const btnChecklist=el("button",{class:"quick-secondary-btn"},el("span",{html:svg("search",19)}),el("span",{},"Checklist / buscar"));
-  quick.appendChild(btnAnom);quick.appendChild(btnChecklist);inner.appendChild(quick);
+  const btnChecklist=el("button",{class:"quick-secondary-btn"},el("span",{html:svg("search",19)}),el("span",{},"Checklist"));quick.appendChild(btnAnom);quick.appendChild(btnChecklist);inner.appendChild(quick);
 
-  const picker=Card({class:"anomaly-picker",style:"display:none;margin-top:10px"});
-  const pickerTitle=el("div",{class:"picker-title"},"Selecione o item encontrado"); picker.appendChild(pickerTitle);
-  const search=el("input",{class:"input",placeholder:"Buscar por código ou componente..."});picker.appendChild(search);
-  const results=el("div",{class:"picker-results"});picker.appendChild(results);
-  let pickerMode="anomaly";
-  const renderPicker=()=>{const q=(search.value||"").trim().toLowerCase();results.innerHTML="";(m.itens||[]).filter((it)=>!q||`${it.codigo} ${it.nome} ${it.familia}`.toLowerCase().includes(q)).slice(0,30).forEach((it)=>{const b=el("button",{class:"picker-item"},el("span",{},CodeBadge(it.codigo),it.nome),Tag(montanteItemStatus(it),"sm"));b.addEventListener("click",async()=>{if(pickerMode==="anomaly"&&it.id!=="prumo"){it.ocorrencias=it.ocorrencias||[];it.ocorrencias.push(newOcorrencia("problema"));it.status="problema";await saveVistoriaNow();}go("itemDetail",v.id,e.id,m.id,null,it.id);});results.appendChild(b);});};
+  const last=lastVisualAnomalyBefore(e,m);
+  if(last){const repeat=el("button",{class:"repeat-anomaly-btn"},el("span",{html:svg("clock",17)}),el("span",{},`Repetir última: ${last.item.codigo} · ${last.item.nome}`));repeat.addEventListener("click",()=>{const current=(m.itens||[]).find((it)=>it.id===last.item.id);if(current)startNewAnomaly(v,e,m,current,last.oc);});inner.appendChild(repeat);}
+
+  const picker=Card({class:"anomaly-picker",style:"display:none;margin-top:9px"});const pickerTitle=el("div",{class:"picker-title"},"Selecione o item encontrado");picker.appendChild(pickerTitle);
+  const recent=recentAnomalyChoices(v,4);if(recent.length){picker.appendChild(el("div",{class:"picker-recent-label"},"Recentes"));const recentRow=el("div",{class:"picker-recent"});recent.forEach((it)=>{const b=el("button",{class:"recent-chip"},`${it.codigo} · ${it.nome}`);b.addEventListener("click",()=>{const current=(m.itens||[]).find((x)=>x.id===it.id);if(current)startNewAnomaly(v,e,m,current);});recentRow.appendChild(b);});picker.appendChild(recentRow);}
+  const search=el("input",{class:"input",placeholder:"Buscar por código ou componente..."});picker.appendChild(search);const results=el("div",{class:"picker-results"});picker.appendChild(results);let pickerMode="anomaly";
+  const renderPicker=()=>{const q=(search.value||"").trim().toLowerCase();results.innerHTML="";visualItems.filter((it)=>!q||`${it.codigo} ${it.nome} ${it.familia}`.toLowerCase().includes(q)).slice(0,30).forEach((it)=>{const b=el("button",{class:"picker-item"},el("span",{},CodeBadge(it.codigo),it.nome),Tag(montanteItemStatus(it),"sm"));b.addEventListener("click",()=>{if(pickerMode==="anomaly")startNewAnomaly(v,e,m,it);else{state.itemDetailReturn="montante";go("itemDetail",v.id,e.id,m.id,null,it.id);}});results.appendChild(b);});};
   search.addEventListener("input",renderPicker);renderPicker();inner.appendChild(picker);
-  const openPicker=(mode)=>{pickerMode=mode;pickerTitle.textContent=mode==="anomaly"?"Selecione o componente com anomalia":"Abrir item do checklist";picker.style.display="block";search.value="";renderPicker();setTimeout(()=>search.focus(),50);};
-  btnAnom.addEventListener("click",()=>openPicker("anomaly"));btnChecklist.addEventListener("click",()=>openPicker("detail"));
+  const openPicker=(mode)=>{pickerMode=mode;pickerTitle.textContent=mode==="anomaly"?"Selecione o componente com anomalia":"Abrir item do checklist";picker.style.display="block";search.value="";renderPicker();setTimeout(()=>search.focus(),50);};btnAnom.addEventListener("click",()=>openPicker("anomaly"));btnChecklist.addEventListener("click",()=>openPicker("detail"));
 
-  const prumo=(m.itens||[]).find((it)=>it.id==="prumo");
-  if(prumo){const ps=montanteItemStatus(prumo);const pc=Card({class:"prumo-card",style:"margin-top:10px"});pc.appendChild(el("div",{class:"prumo-head"},el("div",{},CodeBadge(prumo.codigo),"Prumo"),Tag(ps,"sm")));const pr=el("div",{class:"row",style:"margin-top:8px"});const ok=el("button",{class:"field-ok-btn",style:"flex:1"},"✓ L + T na tolerância");ok.addEventListener("click",async()=>{prumo.ocorrencias=[normalizeOccurrence({...newOcorrencia("ok"),descTxt:"COLUNA NA TOLERÂNCIA DO PRUMO",localTxt:"LONGITUDINAL / TRANSVERSAL",status:"ok"},prumo,"ok")];prumo.revisado=true;syncMontanteItemStatus(prumo);await saveVistoriaNow();render();});const det=el("button",{class:"ghost-btn touch-btn",style:"flex:1"},"Detalhar eixos");det.addEventListener("click",()=>go("itemDetail",v.id,e.id,m.id,null,prumo.id));pr.appendChild(ok);pr.appendChild(det);pc.appendChild(pr);inner.appendChild(pc);}
+  if(!(m.id in fieldChecklistCollapseState))fieldChecklistCollapseState[m.id]=true;const ckCollapsed=fieldChecklistCollapseState[m.id];const familyWrap=el("div",{class:"full-checklist-wrap",style:"margin-top:10px"});
+  const ckStatus=overallStatus(visualItems.map((it)=>({status:montanteItemStatus(it)})));
+  const ckHead=el("div",{class:"card section-toggle"},
+    el("div",{},el("div",{style:"font-weight:700;font-size:14px"},"Checklist visual completo"),el("div",{class:"insp-sub"},`${visualItems.length} itens · abra somente quando precisar`)),
+    el("div",{style:"display:flex;align-items:center;gap:8px"},Tag(done?ckStatus:"pendente","sm"),el("span",{html:svg("chevronRight",16,ckCollapsed?"":"transform:rotate(90deg)")}))
+  );
+  ckHead.addEventListener("click",()=>{fieldChecklistCollapseState[m.id]=!fieldChecklistCollapseState[m.id];render();});familyWrap.appendChild(ckHead);if(!ckCollapsed)FAMILIAS_ORDEM.forEach((familia)=>{const itens=visualItems.filter((it)=>it.familia===familia);if(itens.length)familyWrap.appendChild(FamilySection(familia,itens,e,m));});inner.appendChild(familyWrap);
 
-  if (!(m.id in fieldChecklistCollapseState)) fieldChecklistCollapseState[m.id] = true;
-  const ckCollapsed=fieldChecklistCollapseState[m.id];
-  const familyWrap=el("div",{class:"full-checklist-wrap",style:"margin-top:14px"});
-  const ckStatus=overallStatus((m.itens||[]).map((it)=>({status:montanteItemStatus(it)})));
-  const ckHead=el("div",{class:"card section-toggle"},el("div",{},el("div",{style:"font-weight:700;font-size:13.5px"},"Checklist completo"),el("div",{class:"insp-sub"},`${(m.itens||[]).length} itens · abra somente quando precisar`)),el("div",{style:"display:flex;align-items:center;gap:8px"},Tag(ckStatus,"sm"),el("span",{html:svg("chevronRight",16,ckCollapsed?"":"transform:rotate(90deg)")})));
-  ckHead.addEventListener("click",()=>{fieldChecklistCollapseState[m.id]=!fieldChecklistCollapseState[m.id];render();});familyWrap.appendChild(ckHead);
-  if(!ckCollapsed)FAMILIAS_ORDEM.forEach((familia)=>{const itens=(m.itens||[]).filter((it)=>it.familia===familia&&itemAplicavel(it,e));if(itens.length)familyWrap.appendChild(FamilySection(familia,itens,e,m));});
-  inner.appendChild(familyWrap);
+  const nav=el("div",{class:"field-secondary-row"});const bprev=el("button",{class:"ghost-btn touch-btn"},"◀ Montante anterior");bprev.disabled=!prev;if(!prev)bprev.style.opacity=".4";bprev.addEventListener("click",async()=>{if(prev){setResume(v,"visual",e,prev);await saveVistoriaNow();go("montante",v.id,e.id,prev.id);}});nav.appendChild(bprev);
+  const options=el("details",{class:"field-options"});options.appendChild(el("summary",{},"⋯ Opções"));const menu=el("div",{class:"field-options-menu"});
+  if(isLast&&!e.visualFinalizada){const finish=el("button",{},"Encerrar estrutura neste montante");finish.addEventListener("click",async()=>{if(!confirm(`Encerrar a inspeção visual da estrutura ${e.codigo||"—"} no Montante ${m.numero}?`))return;completeMontanteVisualAsInspected(m,e);const faltantes=(e.montantes||[]).filter((x)=>!visualMontanteDone(x,e));if(faltantes.length){alert(`Ainda há ${faltantes.length} montante(s) visualmente não concluído(s). Revise antes de encerrar a estrutura.`);return;}completeStructureVisualAsInspected(e);e.ultimoMontante=m.numero;setResume(v,"prumo",e,(e.montantes||[])[0]||null);await saveVistoriaNow();go("estrutura",v.id,e.id);});menu.appendChild(finish);}
+  if(isLast&&!e.visualFinalizada){const del=el("button",{class:"danger-option"},"Excluir este montante");del.addEventListener("click",async()=>{const msg=montanteHasActivity(m)?"Este montante possui dados. Excluir mesmo assim?":"Excluir este montante vazio?";if(!confirm(msg))return;e.montantes=e.montantes.filter((x)=>x.id!==m.id);await saveVistoriaNow();if(prev)go("montante",v.id,e.id,prev.id);else go("estrutura",v.id,e.id);});menu.appendChild(del);}options.appendChild(menu);nav.appendChild(options);inner.appendChild(nav);
 
-  const ord=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero); const idx=ord.findIndex((x)=>x.id===m.id); const prev=ord[idx-1]; const isLast = idx === ord.length - 1;
-  const nav=el("div",{class:"row",style:"margin-top:12px"});
-  const bprev=el("button",{class:"ghost-btn touch-btn",style:"flex:1"},"◀ Anterior"); bprev.disabled=!prev; if(!prev)bprev.style.opacity=".4"; bprev.addEventListener("click",async()=>{if(prev){await saveVistoriaNow();go("montante",v.id,e.id,prev.id);}}); nav.appendChild(bprev);
-  if (isLast) {
-    const bdel=el("button",{class:"ghost-btn touch-btn",style:"flex:1;color:var(--red-dark)"},"Excluir este montante");
-    bdel.addEventListener("click",async()=>{const msg=montanteHasActivity(m)?"Este montante possui dados. Excluir mesmo assim?":"Excluir este montante vazio?";if(!confirm(msg))return;e.montantes=e.montantes.filter((x)=>x.id!==m.id);await saveVistoriaNow();if(prev)go("montante",v.id,e.id,prev.id);else go("estrutura",v.id,e.id);}); nav.appendChild(bdel);
+  const sticky=el("div",{class:"field-sticky no-print"});const nextBtn=el("button",{class:"field-next-btn"},e.visualFinalizada?"✓ VOLTAR À ESTRUTURA":(anom?"✓ SALVAR VISUAL E PRÓXIMO":"✓ CONFORME E PRÓXIMO"));
+  nextBtn.addEventListener("click",async()=>{if(e.visualFinalizada){await saveVistoriaNow();return go("estrutura",v.id,e.id);}completeMontanteVisualAsInspected(m,e);let next=ord[idx+1];if(!next)next=addNextMontante(e);setResume(v,"visual",e,next);await saveVistoriaNow();go("montante",v.id,e.id,next.id);});sticky.appendChild(nextBtn);sticky.appendChild(el("div",{class:"field-sticky-hint"},"Este botão confirma somente a inspeção visual. Prumo e Lux são feitos em etapas separadas."));wrap.appendChild(sticky);return wrap;
+}
+
+function PrumoScreen() {
+  const wrap=el("div",{class:"field-screen measure-screen",style:"padding-bottom:104px"});const inner=el("div",{class:"screen",style:"padding-top:10px"});wrap.appendChild(inner);
+  const v=state.draftVistoria;const e=v&&(v.estruturas||[]).find((x)=>x.id===state.activeEstruturaId);let m=e&&(e.montantes||[]).find((x)=>x.id===state.activeMontanteId);
+  if(!v||!e){inner.appendChild(el("div",{class:"empty"},"Estrutura não encontrada."));return wrap;}if(!e.visualFinalizada){inner.appendChild(el("div",{class:"card empty"},"Finalize primeiro a inspeção visual desta estrutura."));return wrap;}
+  const ord=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero);if(!m)m=ord.find((x)=>!prumoDone(x))||ord[0];if(!m){inner.appendChild(el("div",{class:"empty"},"Nenhum montante cadastrado."));return wrap;}
+  setResume(v,"prumo",e,m);const idx=ord.findIndex((x)=>x.id===m.id);const prev=ord[idx-1],next=ord[idx+1];const item=prumoItem(m);normalizeMontanteItem(item);const st=montanteItemStatus(item);const prog=prumoProgress(e);
+  const hero=Card({class:"measure-hero"});hero.appendChild(el("div",{class:"measure-kicker"},`PRUMO · Estrutura ${e.codigo||"—"}`));hero.appendChild(el("div",{class:"measure-number"},"MONTANTE ",el("strong",{},String(m.numero).padStart(3,"0")),el("span",{},` de ${ord.length}`)));hero.appendChild(el("div",{class:"measure-progress"},el("div",{class:"progress-track"},el("div",{class:"progress-fill",style:`width:${ord.length?Math.round(prog.done/ord.length*100):0}%` })),el("span",{},`${prog.done}/${ord.length} medidos`)));hero.appendChild(el("div",{class:"measure-status"},Tag(st,"sm"),el("span",{id:"save-indicator",class:"save-indicator"},"✓ salvo")));inner.appendChild(hero);
+  const advance=async()=>{const p=prumoProgress(e);if(next){setResume(v,"prumo",e,next);await saveVistoriaNow();go("prumo",v.id,e.id,next.id);}else{e.prumoFinalizada=p.complete;await saveVistoriaNow();go("estrutura",v.id,e.id);}};
+  if(st==="pendente"){
+    const ok=el("button",{class:"measure-ok-btn"},"✓ L + T NA TOLERÂNCIA →");ok.addEventListener("click",async()=>{item.ocorrencias=[normalizeOccurrence({...newOcorrencia("ok"),descTxt:"COLUNA NA TOLERÂNCIA DO PRUMO",localTxt:"LONGITUDINAL / TRANSVERSAL",status:"ok"},item,"ok")];item.revisado=true;syncMontanteItemStatus(item);e.prumoFinalizada=false;await advance();});inner.appendChild(ok);
+    const alt=el("div",{class:"measure-alt-grid"});const det=el("button",{class:"quick-secondary-btn"},"Detalhar eixos / fora de prumo");det.addEventListener("click",()=>{state.itemDetailReturn="prumo";go("itemDetail",v.id,e.id,m.id,null,item.id);});const no=el("button",{class:"quick-secondary-btn"},"Sem acesso");no.addEventListener("click",async()=>{item.ocorrencias=[normalizeOccurrence({...newOcorrencia("naoaplica"),descTxt:"COLUNA SEM ACESSO",localTxt:"LONGITUDINAL / TRANSVERSAL",status:"naoaplica"},item,"naoaplica")];item.revisado=true;syncMontanteItemStatus(item);await advance();});alt.appendChild(det);alt.appendChild(no);inner.appendChild(alt);
+  } else {
+    const result=Card({class:"measure-result",style:"margin-top:10px"});result.appendChild(el("div",{class:"measure-result-title"},"Resultado registrado"));(item.ocorrencias||[]).forEach((oc)=>result.appendChild(el("div",{class:"measure-result-line"},el("strong",{},oc.localTxt||"Resultado"),el("span",{},oc.descTxt||"—"))));const edit=el("button",{class:"ghost-btn touch-btn",style:"width:100%;margin-top:8px"},"Editar resultado");edit.addEventListener("click",()=>{state.itemDetailReturn="prumo";e.prumoFinalizada=false;go("itemDetail",v.id,e.id,m.id,null,item.id);});result.appendChild(edit);inner.appendChild(result);
   }
-  inner.appendChild(nav);
-
-  const sticky=el("div",{class:"field-sticky no-print"}); const actions=el("div",{class:"field-sticky-actions"});
-  const lastBtn=el("button",{class:"field-last-btn"},"Este é o último");
-  lastBtn.addEventListener("click",async()=>{completeMontanteAsInspected(m);e.ultimoMontante=m.numero;await saveVistoriaNow();go("estrutura",v.id,e.id);});
-  const nextBtn=el("button",{class:"field-next-btn",style:"width:100%"},anom?"✓ SALVAR E PRÓXIMO":"✓ CONFORME E PRÓXIMO");
-  nextBtn.addEventListener("click",async()=>{completeMontanteAsInspected(m);let next=ord[idx+1];if(!next)next=addNextMontante(e);await saveVistoriaNow();go("montante",v.id,e.id,next.id);});
-  actions.appendChild(lastBtn);actions.appendChild(nextBtn);sticky.appendChild(actions);sticky.appendChild(el("div",{class:"field-sticky-hint"},"Pendentes são confirmados como conformes; anomalias registradas são preservadas."));wrap.appendChild(sticky);
+  const nav=el("div",{class:"field-secondary-row"});const bp=el("button",{class:"ghost-btn touch-btn"},"◀ Anterior");bp.disabled=!prev;if(!prev)bp.style.opacity=".4";bp.addEventListener("click",async()=>{if(prev){setResume(v,"prumo",e,prev);await saveVistoriaNow();go("prumo",v.id,e.id,prev.id);}});nav.appendChild(bp);const exit=el("button",{class:"ghost-btn touch-btn"},"Sair do Prumo");exit.addEventListener("click",async()=>{e.prumoFinalizada=prumoProgress(e).complete;await saveVistoriaNow();go("estrutura",v.id,e.id);});nav.appendChild(exit);inner.appendChild(nav);
+  if(st!=="pendente"){const sticky=el("div",{class:"field-sticky no-print"});const b=el("button",{class:"field-next-btn"},next?"PRÓXIMO MONTANTE →":"✓ FINALIZAR PRUMO DA ESTRUTURA");b.addEventListener("click",advance);sticky.appendChild(b);wrap.appendChild(sticky);}return wrap;
+}
+function LuxScreen() {
+  const wrap=el("div",{class:"field-screen measure-screen",style:"padding-bottom:30px"});const inner=el("div",{class:"screen",style:"padding-top:10px"});wrap.appendChild(inner);
+  const v=state.draftVistoria;const e=v&&(v.estruturas||[]).find((x)=>x.id===state.activeEstruturaId);if(!v||!e){inner.appendChild(el("div",{class:"empty"},"Estrutura não encontrada."));return wrap;}if(!e.visualFinalizada){inner.appendChild(el("div",{class:"card empty"},"Finalize primeiro a inspeção visual desta estrutura."));return wrap;}
+  const item=iluminacaoItem(e);if(!item){inner.appendChild(el("div",{class:"empty"},"Item 9.45 de iluminação não encontrado no catálogo."));return wrap;}item.ocorrencias=item.ocorrencias||[];setResume(v,"lux",e);
+  const prog=luxProgress(e);const hero=Card({class:"measure-hero lux-hero"});hero.appendChild(el("div",{class:"measure-kicker"},`ILUMINAÇÃO · Estrutura ${e.codigo||"—"}`));hero.appendChild(el("div",{class:"lux-main"},el("strong",{},String(prog.measurements)),el("span",{},prog.measurements===1?"aferição registrada":"aferições registradas")));hero.appendChild(el("div",{class:"lux-limit"},`Limite configurado: ≥ ${item.min} ${item.unidade}`));hero.appendChild(el("div",{class:"measure-status"},prog.problems?Tag("problema","sm",`${prog.problems} abaixo`):prog.complete?Tag("ok","sm","Concluída"):Tag("pendente","sm","Em andamento"),el("span",{id:"save-indicator",class:"save-indicator"},"✓ salvo")));inner.appendChild(hero);
+  const list=el("div",{class:"lux-list"});
+  const renderLuxCard=(oc,idx)=>{normalizeOccurrence(oc,item,"pendente");const c=Card({class:"lux-measure-card"});c.appendChild(el("div",{class:"occurrence-head"},el("div",{},el("div",{style:"font-weight:700"},`Aferição ${idx+1}`),Tag(ocorrenciaStatus(oc,item),"sm")),(()=>{const b=el("button",{class:"icon-btn",html:svg("trash",15)});b.addEventListener("click",async()=>{if(confirm("Remover esta aferição?")){item.ocorrencias.splice(idx,1);e.luxFinalizada=false;await saveVistoriaNow();render();}});return b;})()));
+    c.appendChild(Field("Montante / posição de referência",inputEl(oc.montanteRef||"",(val)=>{oc.montanteRef=val;e.luxFinalizada=false;saveVistoriaDebounced();},"Ex: Montante 23")));
+    const inp=inputEl(oc.valor||"",(val)=>{oc.valor=val;oc.status=statusFromMedicao(val,item.min);e.luxFinalizada=false;saveVistoriaDebounced();},`Mínimo ${item.min}`,"number");c.appendChild(Field(`Valor medido (${item.unidade})`,inp));const st=statusFromMedicao(oc.valor,item.min);c.appendChild(el("div",{class:"measurement-hint"},!oc.valor?`Digite o valor medido · mínimo ${item.min} ${item.unidade}`:st==="ok"?`✓ Dentro do limite (≥ ${item.min} ${item.unidade})`:`⚠ Abaixo do limite (${item.min} ${item.unidade})`));return c;};
+  item.ocorrencias.forEach((oc,idx)=>list.appendChild(renderLuxCard(oc,idx)));if(!item.ocorrencias.length)list.appendChild(el("div",{class:"card empty"},"Nenhuma aferição ainda. Registre os pontos definidos pelo técnico para esta estrutura."));inner.appendChild(list);
+  const add=el("button",{class:"measure-add-btn"},"＋ Adicionar aferição");add.addEventListener("click",async()=>{item.ocorrencias.push(newOcorrencia("pendente"));e.luxFinalizada=false;await saveVistoriaNow();render();});inner.appendChild(add);
+  const finish=el("button",{class:"field-next-btn",style:"margin-top:12px"},e.luxFinalizada?"✓ ETAPA LUX CONCLUÍDA — VOLTAR":"✓ FINALIZAR LUX DESTA ESTRUTURA");finish.addEventListener("click",async()=>{const p=luxProgress(e);if(!e.luxFinalizada){if(!p.measurements)return alert("Registre pelo menos uma aferição antes de finalizar a etapa de Lux.");if(p.pending)return alert(`Há ${p.pending} aferição(ões) sem valor válido.`);e.luxFinalizada=true;e.luxFinalizadaAt=new Date().toISOString();}await saveVistoriaNow();go("estrutura",v.id,e.id);});inner.appendChild(finish);
   return wrap;
 }
+
 function statusSelect(item) {
   const sel = el("select", { class: "status-select status-select-" + item.status });
   [["pendente", "Pendente"], ["ok", "Conforme"], ["problema", "Com anomalia"], ["naoaplica", "Não se aplica"]].forEach(([val, label]) => {
@@ -1169,9 +1357,10 @@ function ItemDetailScreen() {
   const list=el("div",{style:"display:flex;flex-direction:column;gap:10px;margin-top:10px"});
   (item.ocorrencias||[]).forEach((oc,idx)=>list.appendChild(MontanteOcorrenciaCard(oc,idx,item)));wrap.appendChild(list);
   const add=el("button",{class:"quick-anomaly-btn",style:"width:100%;margin-top:12px"},el("span",{html:svg("plus",18)}),item.id==="prumo"?"Adicionar resultado / eixo":"Adicionar outra ocorrência");
-  add.addEventListener("click",async()=>{item.ocorrencias=item.ocorrencias||[];item.ocorrencias.push(newOcorrencia(item.id==="prumo"?"pendente":"problema"));item.status=item.id==="prumo"?"pendente":"problema";await saveVistoriaNow();render();});wrap.appendChild(add);
+  add.addEventListener("click",async()=>{if(item.id!=="prumo")return startNewAnomaly(v,e,m,item);item.ocorrencias=item.ocorrencias||[];item.ocorrencias.push(newOcorrencia("pendente"));item.status="pendente";e.prumoFinalizada=false;await saveVistoriaNow();render();});wrap.appendChild(add);
   wrap.appendChild(el("div",{class:"field-mode-hint",style:"margin-top:8px"},"O mesmo código pode ter vários registros no mesmo montante. Cada registro pode ter até 4 fotos."));
-  const back=el("button",{class:"submit-btn",style:"width:100%;margin-top:16px"},"Voltar para o montante");back.addEventListener("click",async()=>{syncMontanteItemStatus(item);await saveVistoriaNow();go("montante",v.id,e.id,m.id);});wrap.appendChild(back);return wrap;
+  const returnToPrumo=state.itemDetailReturn==="prumo";
+  const back=el("button",{class:"submit-btn",style:"width:100%;margin-top:16px"},returnToPrumo?"Voltar para o modo Prumo":"Voltar para o montante");back.addEventListener("click",async()=>{syncMontanteItemStatus(item);if(item.id==="prumo")e.prumoFinalizada=prumoProgress(e).complete;await saveVistoriaNow();go(returnToPrumo?"prumo":"montante",v.id,e.id,m.id);});wrap.appendChild(back);return wrap;
 }
 function MontanteOcorrenciaCard(oc,idx,item){
   normalizeOccurrence(oc,item,item.id==="prumo"?"pendente":"problema");
@@ -1524,7 +1713,7 @@ function ReportScreen() {
 
     const agg = {};
     problemEntries.forEach(({ i }) => { const q = Number(i.qtd) > 0 ? Number(i.qtd) : 1; const p = pecaDoItem(i); agg[p] = (agg[p] || 0) + q; });
-    estOcorrencias.forEach(({ it, oc }) => { const q = Number(oc.qtd) > 0 ? Number(oc.qtd) : 1; const p = oc.tipoTxt || it.peca; agg[p] = (agg[p] || 0) + q; });
+    estOcorrencias.forEach(({ it, oc }) => { if (it.tipo === "medicao") return; const q = Number(oc.qtd) > 0 ? Number(oc.qtd) : 1; const p = oc.tipoTxt || it.peca; agg[p] = (agg[p] || 0) + q; });
     if (Object.keys(agg).length) {
       const partsCard = Card({ style: "padding:4px;margin-bottom:8px" });
       Object.entries(agg).forEach(([peca, qtd], idx, arr) => {
@@ -1586,6 +1775,7 @@ function buildAnomaliaRows(v) {
   });
   return rows;
 }
+function pecaDoItem(it) { return it.peca; }
 function csvEscape(val) {
   const s = String(val === null || val === undefined ? "" : val);
   return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
@@ -1682,7 +1872,7 @@ function buildPartsForVistoria(v) {
   const bucket={};
   (v.estruturas||[]).filter((e)=>!e.resolvido&&isProblem(estruturaStatus(e))).forEach((e)=>{
     montanteProblemEntries(e).forEach(({m,item,i})=>{const q=Number(i.qtd)>0?Number(i.qtd):1;const peca=i.tipoTxt||pecaDoItem(item);if(!bucket[peca])bucket[peca]={peca,qtd:0,graus:new Set(),refs:new Set()};bucket[peca].qtd+=q;if(i.grauTxt)bucket[peca].graus.add(i.grauTxt);bucket[peca].refs.add(`${e.codigo} · Montante ${m.numero}`);});
-    estruturaProblemOccurrences(e).forEach(({it,oc})=>{const q=Number(oc.qtd)>0?Number(oc.qtd):1;const peca=oc.tipoTxt||it.peca;if(!bucket[peca])bucket[peca]={peca,qtd:0,graus:new Set(),refs:new Set()};bucket[peca].qtd+=q;if(oc.grauTxt)bucket[peca].graus.add(oc.grauTxt);bucket[peca].refs.add(`${e.codigo} · ${oc.montanteRef||"estrutura"}`);});
+    estruturaProblemOccurrences(e).forEach(({it,oc})=>{if(it.tipo==="medicao")return;const q=Number(oc.qtd)>0?Number(oc.qtd):1;const peca=oc.tipoTxt||it.peca;if(!bucket[peca])bucket[peca]={peca,qtd:0,graus:new Set(),refs:new Set()};bucket[peca].qtd+=q;if(oc.grauTxt)bucket[peca].graus.add(oc.grauTxt);bucket[peca].refs.add(`${e.codigo} · ${oc.montanteRef||"estrutura"}`);});
   });
   return Object.values(bucket);
 }
@@ -1912,6 +2102,7 @@ function buildPartsByLocation() {
         bucket[peca].refs.add(`${e.codigo} · Montante ${m.numero}`);
       });
       estruturaProblemOccurrences(e).forEach(({it,oc}) => {
+        if (it.tipo === "medicao") return;
         const q = Number(oc.qtd) > 0 ? Number(oc.qtd) : 1;
         const peca = oc.tipoTxt || it.peca;
         if (!locations[key]) locations[key] = { local: v.local, itens: {} };
@@ -2113,7 +2304,7 @@ function ConfigScreen() {
   const backupRow = el("div", { class: "row" });
   const exportBtn = el("button", { class: "ghost-btn", style: "flex:1;padding:10px" }, "Exportar backup (.json)");
   exportBtn.addEventListener("click", async () => {
-    const all = { schemaVersion: 2, appVersion: APP_VERSION, config: state.config, vistorias: await idbGetAll("vistorias"), orderedParts: state.orderedParts, exportadoEm: new Date().toISOString() };
+    const all = { schemaVersion: 3, appVersion: APP_VERSION, config: state.config, vistorias: await idbGetAll("vistorias"), orderedParts: state.orderedParts, exportadoEm: new Date().toISOString() };
     download(`backup-inspecoes-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(all), "application/json");
   });
   const importInput = el("input", { type: "file", accept: "application/json", style: "display:none" });
