@@ -84,8 +84,8 @@ const DEFAULT_ITEMS = [
   { id: "piso", codigo: "9.37", categoria: "Gerais", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras", descOpcoes: ["PISO INDUSTRIAL DANIFICADO", "PISO INDUSTRIAL DESNIVELADO", "PAREDE DO PRÉDIO DANIFICADA", "COLUNA DO PRÉDIO DANIFICADA", "ÁGUA EMPOÇADA", "GOTEIRA", "OUTROS"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras" },
   { id: "iluminacao", codigo: "9.45", categoria: "Iluminação", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Aferição de iluminação nos corredores", tipo: "medicao", unidade: "lux", min: 200, peca: "Aferição de iluminação nos corredores" },
 ];
-const APP_VERSION = "2.17.1";
-const APP_VERSION_DATE = "31/08/2026";
+const APP_VERSION = "2.18.5";
+const APP_VERSION_DATE = "01/09/2026";
 const CATALOG_VERSION = 5;
 const DEFAULT_CONFIG = {
   empresa: "Minha Empresa",
@@ -128,6 +128,46 @@ const GRAU_OPCOES = ["LEVE", "MÉDIO", "GRAVE", "GRAVÍSSIMO"];
 
 /* ---------------- Utils ---------------- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+function nowIso() { return new Date().toISOString(); }
+let _deviceId = null;
+function getDeviceId() { return _deviceId || "device-desconhecido"; }
+async function ensureDeviceId() {
+  if (_deviceId) return _deviceId;
+  let stored = await idbGet("config", "deviceId");
+  if (!stored) { stored = "DEV-" + uid().toUpperCase(); await idbSet("config", "deviceId", stored); }
+  _deviceId = stored;
+  return _deviceId;
+}
+function touchMeta(obj) { if (obj) { obj.metaUpdatedAt = nowIso(); obj.metaDeviceOrigin = getDeviceId(); } return obj; }
+function touchMontante(m, e) { if (m) { m.updatedAt = nowIso(); m.deviceOrigin = getDeviceId(); } if (e) touchStage(e, "visual"); }
+function touchMontanteMeta(m, e) { if (m) { m.metaUpdatedAt = nowIso(); m.metaDeviceOrigin = getDeviceId(); } }
+function touchResolvido(e) { if (e) { e.resolvidoUpdatedAt = nowIso(); e.resolvidoDeviceOrigin = getDeviceId(); } }
+function stageForItem(item) {
+  if (!item) return "visual";
+  if (item.id === "prumo") return "prumo";
+  if (item.id === "iluminacao") return "lux";
+  return "visual";
+}
+function touchOccurrence(oc) { if (oc) { oc.updatedAt = nowIso(); oc.deviceOrigin = getDeviceId(); } return oc; }
+function touchOccurrenceFull(oc, item, e) {
+  touchOccurrence(oc);
+  if (item) touchItem(item);
+  if (e) touchStage(e, stageForItem(item));
+}
+function touchItem(it) { if (it) { it.updatedAt = nowIso(); it.deviceOrigin = getDeviceId(); } return it; }
+function touchStage(e, stage) { if (e) { e[stage + "UpdatedAt"] = nowIso(); e[stage + "DeviceOrigin"] = getDeviceId(); } return e; }
+function ensureTombstones(v) {
+  v.tombstones = v.tombstones || { estruturas: {}, montantes: {}, ocorrencias: {}, photos: {} };
+  v.tombstones.estruturas = v.tombstones.estruturas || {};
+  v.tombstones.montantes = v.tombstones.montantes || {};
+  v.tombstones.ocorrencias = v.tombstones.ocorrencias || {};
+  v.tombstones.photos = v.tombstones.photos || {};
+  return v.tombstones;
+}
+function recordTombstone(v, kind, id) {
+  const t = ensureTombstones(v);
+  t[kind][id] = { deletedAt: nowIso(), deviceOrigin: getDeviceId() };
+}
 function fmtDate(iso) {
   const d = new Date(iso);
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }) + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -178,16 +218,19 @@ function ocorrenciaStatus(oc, item) {
   if (item && item.id === "prumo") return prumoStatusFromDesc(oc && oc.descTxt);
   return (oc && oc.status) || "problema";
 }
-function occurrencePhotos(obj) {
+function occurrencePhotoRefs(obj) {
   if (!obj) return [];
   const arr = Array.isArray(obj.fotos) ? obj.fotos.filter(Boolean) : [];
   if (!arr.length && obj.foto) arr.push(obj.foto);
-  return arr.slice(0, 4);
+  return arr;
+}
+function occurrencePhotos(obj) {
+  return occurrencePhotoRefs(obj);
 }
 function normalizeOccurrence(oc, item, defaultStatus = "problema") {
   oc = oc || {};
   oc.id = oc.id || uid();
-  oc.fotos = occurrencePhotos(oc);
+  oc.fotos = occurrencePhotoRefs(oc);
   delete oc.foto;
   if (!oc.status) oc.status = item && (item.tipo === "medicao" || item.id === "prumo") ? ocorrenciaStatus(oc, item) : defaultStatus;
   if (oc.qtd == null) oc.qtd = 1;
@@ -352,15 +395,22 @@ function completeMontanteVisualAsInspected(m, e) {
     it.revisado = true;
     it.status = "ok";
     syncMontanteItemStatus(it);
+    // Não toca updatedAt/deviceOrigin item a item aqui: m.updatedAt + m.deviceOrigin já provam
+    // que o montante foi revisado. Timestamp individual só quando o técnico mexe NAQUELE item específico
+    // (ver touchItem() nos handlers de edição) — senão a compactação perde efeito em escala.
   });
   m.visualInspecionadoAt = new Date().toISOString();
+  m.updatedAt = nowIso(); m.deviceOrigin = getDeviceId();
+  if (e) touchStage(e, "visual");
 }
 function completeStructureVisualAsInspected(e) {
   visualStructureItems(e).forEach((it) => {
     if (estruturaEstItemStatus(it) === "pendente") it.revisado = true;
+    // idem: e.visualUpdatedAt (tocado abaixo) já é prova suficiente pros itens implicitamente conformes.
   });
   e.visualFinalizada = true;
   e.visualFinalizadaAt = new Date().toISOString();
+  touchStage(e, "visual");
 }
 function inspectionStageSummary(v) {
   const estruturas = v.estruturas || [];
@@ -402,10 +452,22 @@ function validateAnomalyOccurrence(oc, item) {
   if (!(Number(oc.qtd || 1) > 0)) return "Informe uma quantidade válida.";
   return "";
 }
-function cancelDraftAnomaly() {
+async function cancelDraftAnomaly() {
   const d = state.draftOccurrence;
   if (!d) return go("montante", state.draftVistoria && state.draftVistoria.id, state.activeEstruturaId, state.activeMontanteId);
   if (occurrenceHasMeaningfulData(d.occurrence) && !confirm("Descartar esta anomalia em rascunho? Fotos e dados ainda não salvos serão perdidos.")) return;
+  const draftPhotos = occurrencePhotoRefs(d.occurrence);
+  if (draftPhotos.length) {
+    const toDeletePhotos = draftPhotos.map((pid) => {
+      PhotoUrlManager.revoke(pid);
+      return { store: "photos", key: pid };
+    });
+    try {
+      await idbTransactionApply([], toDeletePhotos);
+    } catch (err) {
+      console.error("Erro ao limpar fotos do rascunho descartado:", err);
+    }
+  }
   const level = d.level || "montante";
   state.draftOccurrence = null;
   if (level === "estrutura" && !state.activeMontanteId) return go("estrutura", state.draftVistoria.id, state.activeEstruturaId);
@@ -447,17 +509,411 @@ function lastVisualAnomalyBefore(e, currentM) {
   }
   return null;
 }
+/* ---------------- Motor PKZIP Offline Nativo (Zero Dependências) ---------------- */
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(uint8Arr) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < uint8Arr.length; i++) {
+    c = CRC32_TABLE[(c ^ uint8Arr[i]) & 0xFF] ^ (c >>> 8);
+  }
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function createZipBlob(fileEntries) {
+  const encoder = new TextEncoder();
+  const chunks = [];
+  const centralRecords = [];
+  let offset = 0;
+
+  for (const file of fileEntries) {
+    const nameBytes = encoder.encode(file.name);
+    const dataBytes = file.data instanceof Uint8Array ? file.data : encoder.encode(file.data);
+    const crc = crc32(dataBytes);
+    const size = dataBytes.length;
+
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    const view = new DataView(localHeader.buffer);
+    view.setUint32(0, 0x04034B50, true);
+    view.setUint16(4, 20, true);
+    view.setUint16(6, 0x0800, true);
+    view.setUint16(8, 0, true);
+    view.setUint16(10, 0, true);
+    view.setUint16(12, 0, true);
+    view.setUint32(14, crc, true);
+    view.setUint32(18, size, true);
+    view.setUint32(22, size, true);
+    view.setUint16(26, nameBytes.length, true);
+    view.setUint16(28, 0, true);
+    localHeader.set(nameBytes, 30);
+
+    chunks.push(localHeader, dataBytes);
+
+    const centralHeader = new Uint8Array(46 + nameBytes.length);
+    const cView = new DataView(centralHeader.buffer);
+    cView.setUint32(0, 0x02014B50, true);
+    cView.setUint16(4, 20, true);
+    cView.setUint16(6, 20, true);
+    cView.setUint16(8, 0x0800, true);
+    cView.setUint16(10, 0, true);
+    cView.setUint16(12, 0, true);
+    cView.setUint16(14, 0, true);
+    cView.setUint32(16, crc, true);
+    cView.setUint32(20, size, true);
+    cView.setUint32(24, size, true);
+    cView.setUint16(28, nameBytes.length, true);
+    cView.setUint16(30, 0, true);
+    cView.setUint16(32, 0, true);
+    cView.setUint16(34, 0, true);
+    cView.setUint16(36, 0, true);
+    cView.setUint32(38, 0, true);
+    cView.setUint32(42, offset, true);
+    centralHeader.set(nameBytes, 46);
+
+    centralRecords.push(centralHeader);
+    offset += localHeader.length + dataBytes.length;
+  }
+
+  const centralDirOffset = offset;
+  let centralDirSize = 0;
+  for (const c of centralRecords) {
+    chunks.push(c);
+    centralDirSize += c.length;
+  }
+
+  const eocd = new Uint8Array(22);
+  const eView = new DataView(eocd.buffer);
+  eView.setUint32(0, 0x06054B50, true);
+  eView.setUint16(4, 0, true);
+  eView.setUint16(6, 0, true);
+  eView.setUint16(8, fileEntries.length, true);
+  eView.setUint16(10, fileEntries.length, true);
+  eView.setUint32(12, centralDirSize, true);
+  eView.setUint32(16, centralDirOffset, true);
+  eView.setUint16(20, 0, true);
+  chunks.push(eocd);
+
+  return new Blob(chunks, { type: "application/zip" });
+}
+
+async function parseZipBlob(zipBlob) {
+  const arrayBuffer = await zipBlob.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  const view = new DataView(arrayBuffer);
+  const decoder = new TextDecoder();
+  const files = new Map();
+
+  if (bytes.length < 22) throw new Error("Arquivo ZIP corrompido: tamanho menor que o cabeçalho mínimo");
+
+  let eocdOffset = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65536); i--) {
+    if (view.getUint32(i, true) === 0x06054B50) {
+      eocdOffset = i;
+      break;
+    }
+  }
+  if (eocdOffset === -1) throw new Error("Arquivo ZIP inválido ou corrompido: assinatura EOCD não encontrada");
+
+  const totalEntries = view.getUint16(eocdOffset + 10, true);
+  const centralDirSize = view.getUint32(eocdOffset + 12, true);
+  const centralDirOffset = view.getUint32(eocdOffset + 16, true);
+
+  if (centralDirOffset + centralDirSize > eocdOffset || centralDirOffset >= bytes.length) {
+    throw new Error("Arquivo ZIP corrompido: limites do diretório central inválidos");
+  }
+
+  let cOffset = centralDirOffset;
+  for (let idx = 0; idx < totalEntries; idx++) {
+    if (cOffset + 46 > bytes.length) throw new Error("Arquivo ZIP corrompido: cabeçalho de entrada truncado");
+    if (view.getUint32(cOffset, true) !== 0x02014B50) throw new Error("Arquivo ZIP corrompido: assinatura central header inválida");
+
+    const compression = view.getUint16(cOffset + 10, true);
+    if (compression !== 0) throw new Error(`Método de compressão não suportado (${compression}). Somente Store (0) é aceito.`);
+
+    const expectedCrc = view.getUint32(cOffset + 16, true);
+    const compressedSize = view.getUint32(cOffset + 20, true);
+    const uncompressedSize = view.getUint32(cOffset + 24, true);
+    if (compressedSize !== uncompressedSize) throw new Error("Arquivo ZIP corrompido: tamanhos comprimido e descomprimido divergem para Store");
+
+    const nameLen = view.getUint16(cOffset + 28, true);
+    const extraLen = view.getUint16(cOffset + 30, true);
+    const commentLen = view.getUint16(cOffset + 32, true);
+    const localHeaderOffset = view.getUint32(cOffset + 42, true);
+
+    if (cOffset + 46 + nameLen > bytes.length) throw new Error("Arquivo ZIP corrompido: nome do arquivo além dos limites");
+    const nameBytes = bytes.subarray(cOffset + 46, cOffset + 46 + nameLen);
+    const fileName = decoder.decode(nameBytes);
+
+    if (localHeaderOffset + 30 > bytes.length) throw new Error(`Arquivo ZIP corrompido: local header além dos limites para ${fileName}`);
+    if (view.getUint32(localHeaderOffset, true) !== 0x04034B50) throw new Error(`Arquivo ZIP corrompido: assinatura local header inválida para ${fileName}`);
+
+    const localNameLen = view.getUint16(localHeaderOffset + 26, true);
+    const localExtraLen = view.getUint16(localHeaderOffset + 28, true);
+    const dataStart = localHeaderOffset + 30 + localNameLen + localExtraLen;
+    const dataEnd = dataStart + uncompressedSize;
+
+    if (dataEnd > bytes.length) throw new Error(`Arquivo ZIP corrompido: dados de ${fileName} ultrapassam o final do arquivo`);
+    const fileData = bytes.subarray(dataStart, dataEnd);
+
+    const actualCrc = crc32(fileData);
+    if (actualCrc !== expectedCrc) {
+      throw new Error(`Arquivo ZIP corrompido: falha de CRC-32 em ${fileName} (esperado 0x${expectedCrc.toString(16)}, obtido 0x${actualCrc.toString(16)})`);
+    }
+
+    files.set(fileName, {
+      name: fileName,
+      data: fileData,
+      text: () => decoder.decode(fileData),
+      blob: (mime = "image/jpeg") => new Blob([fileData], { type: mime })
+    });
+
+    cOffset += 46 + nameLen + extraLen + commentLen;
+  }
+  return files;
+}
+
+/* ---------------- Preflight & Validação de Pacotes v2.18.2 ---------------- */
+async function preflightImportPackage(data, zipPhotosMap = null) {
+  if (!data || !Array.isArray(data.vistorias)) {
+    throw new Error("Preflight falhou: pacote não contém lista de vistorias válida.");
+  }
+
+  const packagePhotosMap = new Map((data.photos || []).map((p) => [p.id, p]));
+
+  const requiredPhotoIds = new Set();
+  for (const v of data.vistorias) {
+    for (const e of (v.estruturas || [])) {
+      for (const it of (e.itensEstrutura || [])) {
+        for (const oc of (it.ocorrencias || [])) {
+          for (const pid of occurrencePhotoRefs(oc)) {
+            if (pid && pid.startsWith("pho_")) requiredPhotoIds.add(pid);
+          }
+        }
+      }
+      for (const m of (e.montantes || [])) {
+        for (const it of (m.itens || [])) {
+          for (const oc of (it.ocorrencias || [])) {
+            for (const pid of occurrencePhotoRefs(oc)) {
+              if (pid && pid.startsWith("pho_")) requiredPhotoIds.add(pid);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Regra de Autossuficiência: todo pacote DEVE conter todas as fotos ativas das vistorias nele declaradas
+  for (const pid of requiredPhotoIds) {
+    const pEntry = packagePhotosMap.get(pid);
+    if (!pEntry) {
+      throw new Error(`Preflight falhou: pacote incompleto. A evidência '${pid}' está referenciada na vistoria mas não existe no pacote.`);
+    }
+
+    if (zipPhotosMap) {
+      if (!pEntry.path || !zipPhotosMap.has(pEntry.path)) {
+        throw new Error(`Preflight falhou: foto '${pid}' aponta para o caminho '${pEntry.path || "indefinido"}' inexistente no ZIP.`);
+      }
+      const fileObj = zipPhotosMap.get(pEntry.path);
+      if (!fileObj || !fileObj.data || fileObj.data.length === 0) {
+        throw new Error(`Preflight falhou: arquivo de evidência '${pEntry.path}' está vazio no ZIP.`);
+      }
+    } else if (pEntry.blobBase64) {
+      if (typeof pEntry.blobBase64 !== "string" || pEntry.blobBase64.length < 50) {
+        throw new Error(`Preflight falhou: foto '${pid}' possui Base64 vazio ou corrompido no JSON.`);
+      }
+    } else {
+      throw new Error(`Preflight falhou: foto '${pid}' sem dados binários válidos no pacote.`);
+    }
+  }
+  return true;
+}
+
+/* ---------------- ProgressModal (Feedback de Etapas e Itens) ---------------- */
+function showProgressModal(title, initialStep = "") {
+  let closed = false;
+  const overlay = el("div", { class: "modal-overlay", style: "z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);position:fixed;inset:0" });
+  const card = el("div", { class: "card", style: "width:90%;max-width:380px;padding:20px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,0.3)" });
+  const titleEl = el("div", { style: "font-weight:700;font-size:16px;margin-bottom:8px" }, title);
+  const stepEl = el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-bottom:12px;min-height:18px" }, initialStep);
+  const barWrap = el("div", { style: "background:var(--bg);height:10px;border-radius:5px;overflow:hidden;margin-bottom:10px;border:1px solid var(--line)" });
+  const barFill = el("div", { style: "background:var(--green);height:100%;width:0%;transition:width .2s ease" });
+  barWrap.appendChild(barFill);
+  const countEl = el("div", { class: "mono", style: "font-size:11.5px;color:var(--ink-faint)" }, "0%");
+  card.appendChild(titleEl);
+  card.appendChild(stepEl);
+  card.appendChild(barWrap);
+  card.appendChild(countEl);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  return {
+    setStep(stepText) {
+      if (closed) return;
+      stepEl.textContent = stepText;
+    },
+    update(current, total, detail = "") {
+      if (closed) return;
+      const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+      barFill.style.width = pct + "%";
+      countEl.textContent = `${current} / ${total} (${pct}%)` + (detail ? ` · ${detail}` : "");
+    },
+    close() {
+      if (closed) return;
+      closed = true;
+      overlay.remove();
+    }
+  };
+}
+
+/* ---------------- Micro-Thumbnail Derivável (80x80 px) ---------------- */
+function createMicroThumbBlob(blob) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const tempUrl = URL.createObjectURL(blob);
+    img.onload = () => {
+      URL.revokeObjectURL(tempUrl);
+      const size = 80;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d", { alpha: false });
+      const minDim = Math.min(img.width, img.height);
+      const sx = (img.width - minDim) / 2;
+      const sy = (img.height - minDim) / 2;
+      ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
+      canvas.toBlob((b) => resolve(b), "image/jpeg", 0.60);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(tempUrl);
+      resolve(null);
+    };
+    img.src = tempUrl;
+  });
+}
+
+/* ---------------- Watermark Derivada para Laudo/PDF (Não-Destrutiva) ---------------- */
+function renderWatermarkedDataUrl(originalBlob, line1 = "", line2 = "") {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const tempUrl = URL.createObjectURL(originalBlob);
+    img.onload = () => {
+      URL.revokeObjectURL(tempUrl);
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d", { alpha: false });
+      ctx.drawImage(img, 0, 0);
+
+      if (line1 || line2) {
+        const hasTwoLines = Boolean(line1 && line2);
+        const barHeight = Math.max(hasTwoLines ? 44 : 28, Math.round(img.height * (hasTwoLines ? 0.055 : 0.038)));
+        ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+        ctx.fillRect(0, img.height - barHeight, img.width, barHeight);
+        ctx.fillStyle = "#FFFFFF";
+        const fontSize = Math.max(12, Math.round(barHeight * (hasTwoLines ? 0.36 : 0.55)));
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        ctx.textBaseline = "middle";
+
+        if (hasTwoLines) {
+          ctx.fillText(line1, 14, img.height - barHeight + (barHeight * 0.32));
+          ctx.font = `normal ${Math.max(11, Math.round(fontSize * 0.9))}px sans-serif`;
+          ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+          ctx.fillText(line2, 14, img.height - barHeight + (barHeight * 0.72));
+        } else {
+          ctx.fillText(line1 || line2, 14, img.height - (barHeight / 2));
+        }
+      }
+
+      resolve(canvas.toDataURL("image/jpeg", 0.75));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(tempUrl);
+      resolve(null);
+    };
+    img.src = tempUrl;
+  });
+}
+
+/* ---------------- Storage Warning por Quota Concedida à PWA ---------------- */
+async function checkStorageQuota() {
+  if (navigator.storage && navigator.storage.estimate) {
+    try {
+      const est = await navigator.storage.estimate();
+      const usageMb = (est.usage / 1024 / 1024).toFixed(1);
+      const quotaMb = (est.quota / 1024 / 1024).toFixed(0);
+      const pct = est.quota > 0 ? (est.usage / est.quota) * 100 : 0;
+      const isWarning = pct > 85;
+      return {
+        usageMb,
+        quotaMb,
+        pct: pct.toFixed(1),
+        isWarning,
+        message: `Quota da PWA: ${usageMb} MB usados de ~${quotaMb} MB concedidos pelo navegador (${pct.toFixed(1)}%).`
+      };
+    } catch (e) {}
+  }
+  return null;
+}
+
 function copyOccurrenceWithoutPhotos(oc) {
   return normalizeOccurrence({ ...oc, id: uid(), fotos: [], foto: null, obs: oc.obs || "", status: "problema" }, null, "problema");
 }
-function resizeImage(file) {
+function base64ToBlob(base64Data, contentType = "image/jpeg") {
+  const parts = base64Data.split(",");
+  const rawBase64 = parts.length > 1 ? parts[1] : parts[0];
+  const mime = parts.length > 1 ? (parts[0].match(/:(.*?);/)?.[1] || contentType) : contentType;
+  const binaryStr = atob(rawBase64);
+  const len = binaryStr.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mime });
+}
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+async function deterministicPhotoIdFromBase64(b64, occurrenceId = "", index = 0) {
+  const seed = (occurrenceId ? `${occurrenceId}_${index}:` : "") + String(b64 || "");
+  if (window.crypto && window.crypto.subtle) {
+    try {
+      const msgBuffer = new TextEncoder().encode(seed);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
+      return "pho_" + hashHex;
+    } catch (e) { /* fallback */ }
+  }
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < seed.length; i++) {
+    const ch = seed.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  const hex = (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  return "pho_" + hex;
+}
+function resizeImageToBlob(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
-        // 1200 px preserva detalhe técnico suficiente para ampliar no relatório,
-        // ainda reduzindo bastante o peso em relação à foto original do celular.
         const maxDim = 1200;
         let w = img.width, h = img.height;
         if (w > h && w > maxDim) { h = Math.round((h * maxDim) / w); w = maxDim; }
@@ -466,7 +922,10 @@ function resizeImage(file) {
         canvas.width = w; canvas.height = h;
         const ctx = canvas.getContext("2d", { alpha: false });
         ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", 0.72));
+        canvas.toBlob((blob) => {
+          if (blob) resolve({ blob, width: w, height: h, size: blob.size, mimeType: "image/jpeg" });
+          else reject(new Error("Falha ao gerar Blob da imagem"));
+        }, "image/jpeg", 0.72);
       };
       img.onerror = reject;
       img.src = e.target.result;
@@ -475,6 +934,128 @@ function resizeImage(file) {
     reader.readAsDataURL(file);
   });
 }
+async function resizeImage(file) {
+  const res = await resizeImageToBlob(file);
+  return blobToBase64(res.blob);
+}
+const PhotoUrlManager = {
+  _cache: new Map(),
+  _maxCache: 150,
+  getUrl(photoId) {
+    const cached = this._cache.get(photoId);
+    if (cached) {
+      cached.lastUsed = Date.now();
+      return cached.url;
+    }
+    return null;
+  },
+  async resolveUrl(photoId) {
+    if (!photoId) return null;
+    if (typeof photoId === "string" && photoId.startsWith("data:image")) return photoId;
+    const cached = this._cache.get(photoId);
+    if (cached) {
+      cached.lastUsed = Date.now();
+      return cached.url;
+    }
+    const record = await idbGet("photos", photoId);
+    if (record && record.blob) {
+      this._evictIfFull();
+      const url = URL.createObjectURL(record.blob);
+      this._cache.set(photoId, { url, blob: record.blob, lastUsed: Date.now() });
+      return url;
+    }
+    return null;
+  },
+  async resolveThumbUrl(photoId) {
+    if (!photoId) return null;
+    if (typeof photoId === "string" && photoId.startsWith("data:image")) return photoId;
+    const thumbKey = "thumb_" + photoId;
+    const cached = this._cache.get(thumbKey);
+    if (cached) {
+      cached.lastUsed = Date.now();
+      return cached.url;
+    }
+    try {
+      const record = await idbGet("photoThumbs", photoId);
+      if (record && record.thumbBlob) {
+        this._evictIfFull();
+        const url = URL.createObjectURL(record.thumbBlob);
+        this._cache.set(thumbKey, { url, blob: record.thumbBlob, lastUsed: Date.now() });
+        return url;
+      }
+    } catch (e) {}
+    const origRecord = await idbGet("photos", photoId);
+    if (!origRecord || !origRecord.blob) return null;
+    try {
+      const thumbBlob = await createMicroThumbBlob(origRecord.blob);
+      if (thumbBlob) {
+        await idbSet("photoThumbs", photoId, { id: photoId, thumbBlob, updatedAt: nowIso() });
+        this._evictIfFull();
+        const url = URL.createObjectURL(thumbBlob);
+        this._cache.set(thumbKey, { url, blob: thumbBlob, lastUsed: Date.now() });
+        return url;
+      }
+    } catch (err) {}
+    return this.resolveUrl(photoId);
+  },
+  async resolveBlob(photoId) {
+    if (!photoId) return null;
+    if (typeof photoId === "string" && photoId.startsWith("data:image")) return base64ToBlob(photoId);
+    const cached = this._cache.get(photoId);
+    if (cached && cached.blob) {
+      cached.lastUsed = Date.now();
+      return cached.blob;
+    }
+    const record = await idbGet("photos", photoId);
+    if (record && record.blob) {
+      this._evictIfFull();
+      if (!this._cache.has(photoId)) {
+        const url = URL.createObjectURL(record.blob);
+        this._cache.set(photoId, { url, blob: record.blob, lastUsed: Date.now() });
+      }
+      return record.blob;
+    }
+    return null;
+  },
+  registerBlob(photoId, blob) {
+    if (!photoId || !blob) return null;
+    this.revoke(photoId);
+    this._evictIfFull();
+    const url = URL.createObjectURL(blob);
+    this._cache.set(photoId, { url, blob, lastUsed: Date.now() });
+    return url;
+  },
+  _evictIfFull() {
+    if (this._cache.size >= this._maxCache) {
+      let oldestId = null, oldestTime = Infinity;
+      for (const [id, item] of this._cache.entries()) {
+        if (item.lastUsed < oldestTime) {
+          oldestTime = item.lastUsed;
+          oldestId = id;
+        }
+      }
+      if (oldestId) this.revoke(oldestId);
+    }
+  },
+  revoke(photoId) {
+    const cached = this._cache.get(photoId);
+    if (cached) {
+      try { URL.revokeObjectURL(cached.url); } catch (e) {}
+      this._cache.delete(photoId);
+    }
+    const thumbCached = this._cache.get("thumb_" + photoId);
+    if (thumbCached) {
+      try { URL.revokeObjectURL(thumbCached.url); } catch (e) {}
+      this._cache.delete("thumb_" + photoId);
+    }
+  },
+  revokeAll() {
+    for (const [id, item] of this._cache.entries()) {
+      try { URL.revokeObjectURL(item.url); } catch (e) {}
+    }
+    this._cache.clear();
+  }
+};
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -497,29 +1078,139 @@ function download(filename, content, mime) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
+const MERGE_SCHEMA_VERSION = 8; // v2.18.0: + photos object store, Blob storage, photo tombstones
+async function downloadZipBackup(filename, onProgress, allowDegraded = false) {
+  const vistorias = await idbGetAll("vistorias");
+  const integrity = await checkPhotoIntegrity(vistorias);
+  let isDegraded = false;
+  let finalFilename = filename;
+
+  if (!integrity.isClean) {
+    if (!allowDegraded) {
+      throw new Error(`Exportação abortada: ${integrity.missing.length} evidência(s) ativa(s) estão ausentes ou corrompidas no banco local. Execute "Saúde dos dados" antes de exportar.`);
+    } else {
+      isDegraded = true;
+      if (!finalFilename.includes("EMERGENCIA-DEGRADADO")) {
+        finalFilename = finalFilename.replace(/(\.zip)$/i, "-EMERGENCIA-DEGRADADO$1");
+      }
+    }
+  }
+
+  const allPhotosRaw = await idbGetAll("photos");
+  const fileEntries = [];
+  const manifestPhotos = [];
+
+  const totalPhotos = allPhotosRaw.length;
+  const batchSize = 15;
+  for (let i = 0; i < totalPhotos; i += batchSize) {
+    const batch = allPhotosRaw.slice(i, i + batchSize);
+    for (const p of batch) {
+      if (p.blob && (p.blob.size > 0 || (p.blob.byteLength && p.blob.byteLength > 0))) {
+        const arrayBuffer = await p.blob.arrayBuffer();
+        const fName = `photos/${p.id}.jpg`;
+        fileEntries.push({ name: fName, data: new Uint8Array(arrayBuffer) });
+        manifestPhotos.push({
+          id: p.id,
+          vistoriaId: p.vistoriaId,
+          occurrenceId: p.occurrenceId,
+          path: fName,
+          mimeType: p.mimeType || "image/jpeg",
+          width: p.width,
+          height: p.height,
+          size: p.size || p.blob.size,
+          createdAt: p.createdAt,
+          deviceOrigin: p.deviceOrigin,
+          updatedAt: p.updatedAt,
+          deletedAt: p.deletedAt || null
+        });
+      }
+    }
+    if (onProgress) onProgress(Math.min(i + batchSize, totalPhotos), totalPhotos, isDegraded ? "Empacotando backup degradado" : "Empacotando fotos");
+    await new Promise((r) => setTimeout(r, 0));
+  }
+
+  const manifest = {
+    schemaVersion: MERGE_SCHEMA_VERSION,
+    appVersion: APP_VERSION,
+    deviceId: await ensureDeviceId(),
+    config: state.config,
+    vistorias: await idbGetAll("vistorias"),
+    photos: manifestPhotos,
+    deletedVistorias: await getDeletedVistoriaIds(),
+    orderedParts: state.orderedParts,
+    exportadoEm: new Date().toISOString(),
+    isDegradedBackup: isDegraded,
+    emergencySnapshotNotice: isDegraded ? "Snapshot de emergência prévio (estado local degradado)" : undefined,
+    degradedReport: isDegraded ? integrity.missing : undefined
+  };
+
+  fileEntries.unshift({ name: "manifest.json", data: JSON.stringify(manifest, null, 2) });
+  const zipBlob = createZipBlob(fileEntries);
+  download(finalFilename, zipBlob, "application/zip");
+  return { isDegraded, filename: finalFilename };
+}
+
+async function downloadFullBackup(filename) {
+  const allPhotosRaw = await idbGetAll("photos");
+  const serializedPhotos = [];
+  const batchSize = 10;
+  for (let i = 0; i < allPhotosRaw.length; i += batchSize) {
+    const batch = allPhotosRaw.slice(i, i + batchSize);
+    for (const p of batch) {
+      const b64 = p.blob ? await blobToBase64(p.blob) : null;
+      serializedPhotos.push({
+        id: p.id,
+        vistoriaId: p.vistoriaId,
+        occurrenceId: p.occurrenceId,
+        blobBase64: b64,
+        mimeType: p.mimeType || "image/jpeg",
+        width: p.width,
+        height: p.height,
+        size: p.size,
+        createdAt: p.createdAt,
+        deviceOrigin: p.deviceOrigin,
+        updatedAt: p.updatedAt,
+        deletedAt: p.deletedAt || null
+      });
+    }
+  }
+  const all = {
+    schemaVersion: MERGE_SCHEMA_VERSION,
+    appVersion: APP_VERSION,
+    deviceId: await ensureDeviceId(),
+    config: state.config,
+    vistorias: await idbGetAll("vistorias"),
+    photos: serializedPhotos,
+    deletedVistorias: await getDeletedVistoriaIds(),
+    orderedParts: state.orderedParts,
+    exportadoEm: new Date().toISOString()
+  };
+  download(filename, JSON.stringify(all), "application/json");
+}
 
 
 /* ---------------- Persistência compacta v2.17.1 ---------------- */
 function compactOccurrenceForStorage(oc) {
   const out = {};
-  ["id","status","montanteRef","descTxt","tipoTxt","localTxt","grauTxt","corte","qtd","correcao","obs","valor"].forEach((k) => {
+  ["id","status","montanteRef","descTxt","tipoTxt","localTxt","grauTxt","corte","qtd","correcao","obs","valor","updatedAt","deviceOrigin"].forEach((k) => {
     const val = oc && oc[k];
     if (val !== undefined && val !== null && val !== "" && !(k === "qtd" && Number(val) === 1)) out[k] = val;
   });
-  const fotos = occurrencePhotos(oc);
+  const fotos = occurrencePhotoRefs(oc);
   if (fotos.length) out.fotos = fotos;
   return out;
 }
 function compactRuntimeItemForStorage(it, impliedVisualOk = false) {
   const occs = (it.ocorrencias || []).map(compactOccurrenceForStorage);
   const st = montanteItemStatus(it);
-  // Se o montante visual já foi fechado, um item visual simplesmente conforme é implícito e pode ser omitido.
-  if (impliedVisualOk && !occs.length && st === "ok" && it.status !== "naoaplica") return null;
+  // Se o montante visual já foi fechado, um item visual simplesmente conforme é implícito e pode ser omitido —
+  // MAS só quando não há metadado de toque a preservar (senão perderíamos updatedAt/deviceOrigin do merge).
+  if (impliedVisualOk && !occs.length && st === "ok" && it.status !== "naoaplica" && !it.updatedAt) return null;
   const out = { id: it.id };
   if (st !== "pendente") out.status = st;
   if (it.revisado) out.revisado = true;
   if (occs.length) out.ocorrencias = occs;
-  ["valor","qtd","correcao","obs","descTxt","tipoTxt","localTxt","grauTxt","corte"].forEach((k) => {
+  ["valor","qtd","correcao","obs","descTxt","tipoTxt","localTxt","grauTxt","corte","updatedAt","deviceOrigin"].forEach((k) => {
     const val = it[k];
     if (val !== undefined && val !== null && val !== "" && !(k === "qtd" && Number(val) === 1)) out[k] = val;
   });
@@ -527,17 +1218,276 @@ function compactRuntimeItemForStorage(it, impliedVisualOk = false) {
 }
 function compactStructureItemForStorage(it, impliedVisualOk = false) {
   const occs = (it.ocorrencias || []).map(compactOccurrenceForStorage);
-  if (impliedVisualOk && !occs.length && it.revisado) return null;
+  if (impliedVisualOk && !occs.length && it.revisado && !it.updatedAt) return null;
   const out = { id: it.id };
   if (it.revisado) out.revisado = true;
   if (occs.length) out.ocorrencias = occs;
+  if (it.updatedAt) out.updatedAt = it.updatedAt;
+  if (it.deviceOrigin) out.deviceOrigin = it.deviceOrigin;
   return Object.keys(out).length > 1 ? out : null;
 }
+/* ---------------- Merge / Consolidação entre aparelhos ---------------- */
+function montanteLatestTouch(m) {
+  if (!m) return null;
+  const candidates = [m.updatedAt, m.metaUpdatedAt];
+  (m.itens || []).forEach((it) => { candidates.push(it.updatedAt); (it.ocorrencias || []).forEach((oc) => candidates.push(oc.updatedAt)); });
+  return candidates.filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
+}
+function estruturaLatestTouch(e) {
+  if (!e) return null;
+  const candidates = [e.visualUpdatedAt, e.prumoUpdatedAt, e.luxUpdatedAt, e.metaUpdatedAt, e.resolvidoUpdatedAt];
+  (e.itensEstrutura || []).forEach((it) => { candidates.push(it.updatedAt); (it.ocorrencias || []).forEach((oc) => candidates.push(oc.updatedAt)); });
+  (e.montantes || []).forEach((m) => { candidates.push(m.updatedAt, m.metaUpdatedAt); (m.itens || []).forEach((it) => { candidates.push(it.updatedAt); (it.ocorrencias || []).forEach((oc) => candidates.push(oc.updatedAt)); }); });
+  return candidates.filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
+}
+function maisRecente(...isos) {
+  return isos.filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
+}
+function isTombstoned(tombMapA, tombMapB, id, referenceIso) {
+  const a = tombMapA && tombMapA[id];
+  const b = tombMapB && tombMapB[id];
+  const tomb = [a, b].filter(Boolean).sort((x, y) => new Date(y.deletedAt) - new Date(x.deletedAt))[0];
+  if (!tomb) return false;
+  if (!referenceIso) return true; // sem timestamp pra contestar a exclusão: respeita o tombstone
+  return new Date(tomb.deletedAt) >= new Date(referenceIso);
+}
+function newer(aIso, bIso) {
+  if (!aIso && !bIso) return 0;
+  if (!aIso) return -1;
+  if (!bIso) return 1;
+  return new Date(aIso) - new Date(bIso);
+}
+function tieKeyOf(obj) {
+  return (obj && obj.deviceOrigin || "") + "|" + (obj && obj.id || "") + "|" + (obj && obj.updatedAt || "");
+}
+// Decide local x incoming de forma determinística: quem tem updatedAt mais recente vence;
+// em empate exato, o desempate usa uma chave de conteúdo (não depende de qual lado é "local"),
+// garantindo que mesclar A->B ou B->A dê sempre o mesmo resultado.
+function resolveWinner(localUpdatedAt, incomingUpdatedAt, localTieObj, incomingTieObj) {
+  const cmp = newer(incomingUpdatedAt, localUpdatedAt);
+  if (cmp > 0) return "incoming";
+  if (cmp < 0) return "local";
+  const lKey = tieKeyOf(localTieObj), iKey = tieKeyOf(incomingTieObj);
+  if (lKey === iKey) return "local";
+  return iKey > lKey ? "incoming" : "local";
+}
+function mergeTombstoneMap(mapA, mapB) {
+  const out = {};
+  const ids = new Set([...Object.keys(mapA || {}), ...Object.keys(mapB || {})]);
+  ids.forEach((id) => {
+    const a = mapA && mapA[id], b = mapB && mapB[id];
+    if (a && b) out[id] = new Date(a.deletedAt) >= new Date(b.deletedAt) ? a : b;
+    else out[id] = a || b;
+  });
+  return out;
+}
+function unionFotos(localFotos, incomingFotos, tombA, tombB) {
+  const tombPhotosA = (tombA && tombA.photos) || {};
+  const tombPhotosB = (tombB && tombB.photos) || {};
+  const seen = new Set();
+  const out = [];
+  const allIds = [...(localFotos || []), ...(incomingFotos || [])];
+
+  for (const pid of allIds) {
+    if (!pid || seen.has(pid)) continue;
+    const tomb = [tombPhotosA[pid], tombPhotosB[pid]].filter(Boolean).sort((x, y) => new Date(y.deletedAt) - new Date(x.deletedAt))[0];
+    if (tomb) {
+      continue;
+    }
+    seen.add(pid);
+    out.push(pid);
+  }
+  return out;
+}
+function occurrenceSnapshot(oc) {
+  return { descTxt: oc.descTxt || "", tipoTxt: oc.tipoTxt || "", localTxt: oc.localTxt || "", grauTxt: oc.grauTxt || "", obs: oc.obs || "", corte: oc.corte || "", qtd: oc.qtd == null ? 1 : oc.qtd, fotos: occurrencePhotoRefs(oc).length, deviceOrigin: oc.deviceOrigin || "", updatedAt: oc.updatedAt || "" };
+}
+function mergeOccurrenceArrays(localOccs, incomingOccs, tombA, tombB) {
+  const byId = new Map();
+  (localOccs || []).forEach((oc) => byId.set(oc.id, { local: oc }));
+  (incomingOccs || []).forEach((oc) => { const cur = byId.get(oc.id) || {}; cur.incoming = oc; byId.set(oc.id, cur); });
+  const result = [];
+  const report = { added: 0, updated: 0, keptLocal: 0, deletedByTombstone: 0, conflicts: [] };
+  for (const [id, pair] of byId) {
+    const ref = maisRecente(pair.local && pair.local.updatedAt, pair.incoming && pair.incoming.updatedAt);
+    if (isTombstoned(tombA && tombA.ocorrencias, tombB && tombB.ocorrencias, id, ref)) { report.deletedByTombstone++; continue; }
+    if (pair.local && pair.incoming) {
+      const winner = resolveWinner(pair.local.updatedAt, pair.incoming.updatedAt, pair.local, pair.incoming);
+      const winnerObj = winner === "incoming" ? pair.incoming : pair.local;
+      // Fotos NUNCA são "vencidas" por inteiro — são sempre UNIDAS, respeitando tombstones de foto.
+      // Se A anexou uma foto e B mudou o grau depois, o resultado tem o grau de B E a foto de A.
+      // Se uma foto foi excluída com tombstone, a exclusão prevalece.
+      const fotosUnidas = unionFotos(occurrencePhotoRefs(pair.local), occurrencePhotoRefs(pair.incoming), tombA, tombB);
+      const merged = { ...winnerObj, fotos: fotosUnidas };
+      result.push(merged);
+      const iguais = JSON.stringify(occurrenceSnapshot(pair.local)) === JSON.stringify(occurrenceSnapshot(pair.incoming));
+      if (winner === "incoming") report.updated++; else report.keptLocal++;
+      if (!iguais) {
+        report.conflicts.push({
+          id, tipo: "ocorrencia", resolvido: winner,
+          versaoA: occurrenceSnapshot(pair.local), versaoB: occurrenceSnapshot(pair.incoming),
+          fotosUnificadas: fotosUnidas.length,
+        });
+      }
+    } else if (pair.incoming) { result.push(pair.incoming); report.added++; }
+    else { result.push(pair.local); report.keptLocal++; }
+  }
+  return { occs: result, report };
+}
+function mergeMontanteItem(localIt, incomingIt, tombA, tombB, report) {
+  if (!localIt) return incomingIt;
+  if (!incomingIt) return localIt;
+  const { occs, report: r } = mergeOccurrenceArrays(localIt.ocorrencias, incomingIt.ocorrencias, tombA, tombB);
+  report.added += r.added; report.updated += r.updated; report.deletedByTombstone += r.deletedByTombstone; report.conflicts.push(...r.conflicts);
+  const winner = resolveWinner(localIt.updatedAt, incomingIt.updatedAt, localIt, incomingIt);
+  const base = winner === "incoming" ? { ...localIt, ...incomingIt } : { ...incomingIt, ...localIt };
+  return { ...base, ocorrencias: occs };
+}
+function mergeMontante(localM, incomingM, tombA, tombB, report) {
+  if (!localM) return incomingM;
+  if (!incomingM) return localM;
+  const winner = resolveWinner(localM.updatedAt, incomingM.updatedAt, localM, incomingM);
+  let rootBase = winner === "incoming" ? { ...localM, ...incomingM } : { ...incomingM, ...localM };
+  // Fabricante/Tipo-Corte/Observação do montante têm timestamp PRÓPRIO — não competem com
+  // "concluí a inspeção visual deste montante" (que só toca m.updatedAt).
+  {
+    const la = localM.metaUpdatedAt, ia = incomingM.metaUpdatedAt;
+    const localTie = { deviceOrigin: localM.metaDeviceOrigin, id: localM.id, updatedAt: la };
+    const incomingTie = { deviceOrigin: incomingM.metaDeviceOrigin, id: incomingM.id, updatedAt: ia };
+    if ((la || ia) && resolveWinner(la, ia, localTie, incomingTie) === "incoming") {
+      rootBase = { ...rootBase, fabricante: incomingM.fabricante, tipoMontante: incomingM.tipoMontante, observacoes: incomingM.observacoes, metaUpdatedAt: ia, metaDeviceOrigin: incomingM.metaDeviceOrigin };
+    } else {
+      rootBase = { ...rootBase, fabricante: localM.fabricante, tipoMontante: localM.tipoMontante, observacoes: localM.observacoes, metaUpdatedAt: la, metaDeviceOrigin: localM.metaDeviceOrigin };
+    }
+  }
+  const idsSet = new Set([...(localM.itens || []).map((it) => it.id), ...(incomingM.itens || []).map((it) => it.id)]);
+  const localById = new Map((localM.itens || []).map((it) => [it.id, it]));
+  const incomingById = new Map((incomingM.itens || []).map((it) => [it.id, it]));
+  const itens = [...idsSet].map((id) => mergeMontanteItem(localById.get(id), incomingById.get(id), tombA, tombB, report));
+  return { ...rootBase, itens };
+}
+function mergeEstruturaItem(localIt, incomingIt, tombA, tombB, report) {
+  return mergeMontanteItem(localIt, incomingIt, tombA, tombB, report);
+}
+function mergeEstrutura(localE, incomingE, tombA, tombB, report) {
+  if (!localE) return incomingE;
+  if (!incomingE) return localE;
+  let base = { ...localE };
+  // Uma vez que a estrutura passou pela tela de criação (em qualquer um dos dois aparelhos), fica assim
+  // pra sempre — não existe "des-completar" o setup, então é uma simples soma lógica (OR), comutativa por natureza.
+  base.setupComplete = Boolean(localE.setupComplete) || Boolean(incomingE.setupComplete);
+  // Cabeçalho (código/setor/tipo/rua/lado/fabricante/observações) tem timestamp PRÓPRIO,
+  // separado de visualUpdatedAt — editar o fabricante não deve competir com "fiz uma anomalia visual".
+  {
+    const la = localE.metaUpdatedAt, ia = incomingE.metaUpdatedAt;
+    const localTie = { deviceOrigin: localE.metaDeviceOrigin, id: localE.id, updatedAt: la };
+    const incomingTie = { deviceOrigin: incomingE.metaDeviceOrigin, id: incomingE.id, updatedAt: ia };
+    if ((la || ia) && resolveWinner(la, ia, localTie, incomingTie) === "incoming") {
+      base.metaUpdatedAt = ia; base.metaDeviceOrigin = incomingE.metaDeviceOrigin;
+      base.setor = incomingE.setor; base.tipoEstrutura = incomingE.tipoEstrutura; base.rua = incomingE.rua; base.lado = incomingE.lado; base.fabricante = incomingE.fabricante; base.observacoesGerais = incomingE.observacoesGerais; base.codigo = incomingE.codigo;
+    }
+  }
+  {
+    const la = localE.resolvidoUpdatedAt, ia = incomingE.resolvidoUpdatedAt;
+    const localTie = { deviceOrigin: localE.resolvidoDeviceOrigin, id: localE.id, updatedAt: la };
+    const incomingTie = { deviceOrigin: incomingE.resolvidoDeviceOrigin, id: incomingE.id, updatedAt: ia };
+    if ((la || ia) && resolveWinner(la, ia, localTie, incomingTie) === "incoming") {
+      base.resolvido = incomingE.resolvido; base.resolvidoUpdatedAt = ia; base.resolvidoDeviceOrigin = incomingE.resolvidoDeviceOrigin;
+    }
+  }
+  const stages = ["visual", "prumo", "lux"];
+  stages.forEach((stage) => {
+    const la = localE[stage + "UpdatedAt"], ia = incomingE[stage + "UpdatedAt"];
+    const localTie = { deviceOrigin: localE[stage + "DeviceOrigin"], id: localE.id, updatedAt: la };
+    const incomingTie = { deviceOrigin: incomingE[stage + "DeviceOrigin"], id: incomingE.id, updatedAt: ia };
+    if ((la || ia) && resolveWinner(la, ia, localTie, incomingTie) === "incoming") {
+      base[stage + "UpdatedAt"] = ia; base[stage + "DeviceOrigin"] = incomingE[stage + "DeviceOrigin"];
+      if (stage === "visual") { base.visualFinalizada = incomingE.visualFinalizada; base.visualFinalizadaAt = incomingE.visualFinalizadaAt; }
+      if (stage === "prumo") { base.prumoFinalizada = incomingE.prumoFinalizada; }
+      if (stage === "lux") { base.luxFinalizada = incomingE.luxFinalizada; base.luxFinalizadaAt = incomingE.luxFinalizadaAt; }
+    }
+  });
+  const montIdsSet = new Set([...(localE.montantes || []).map((m) => m.id), ...(incomingE.montantes || []).map((m) => m.id)]);
+  const localMById = new Map((localE.montantes || []).map((m) => [m.id, m]));
+  const incomingMById = new Map((incomingE.montantes || []).map((m) => [m.id, m]));
+  base.montantes = [...montIdsSet].filter((id) => {
+    const refM = maisRecente(montanteLatestTouch(localMById.get(id)), montanteLatestTouch(incomingMById.get(id)));
+    if (isTombstoned(tombA && tombA.montantes, tombB && tombB.montantes, id, refM)) { report.deletedByTombstone++; return false; }
+    return true;
+  }).map((id) => mergeMontante(localMById.get(id), incomingMById.get(id), tombA, tombB, report)).sort((a, b) => a.numero - b.numero);
+
+  const estItemIdsSet = new Set([...(localE.itensEstrutura || []).map((it) => it.id), ...(incomingE.itensEstrutura || []).map((it) => it.id)]);
+  const localEById = new Map((localE.itensEstrutura || []).map((it) => [it.id, it]));
+  const incomingEById = new Map((incomingE.itensEstrutura || []).map((it) => [it.id, it]));
+  base.itensEstrutura = [...estItemIdsSet].map((id) => mergeEstruturaItem(localEById.get(id), incomingEById.get(id), tombA, tombB, report));
+  return base;
+}
+function detectDuplicateCodigos(estruturas) {
+  const byCodigo = {};
+  (estruturas || []).forEach((e) => { const c = String(e.codigo || "").trim().toUpperCase(); if (!c) return; (byCodigo[c] = byCodigo[c] || []).push(e.id); });
+  return Object.entries(byCodigo).filter(([, ids]) => ids.length > 1).map(([codigo, ids]) => ({ codigo, ids }));
+}
+function vistoriaLatestMeaningfulTouch(v) {
+  if (!v) return null;
+  const candidates = [v.metaUpdatedAt, v.finalizadaAt];
+  (v.estruturas || []).forEach((e) => candidates.push(estruturaLatestTouch(e)));
+  return candidates.filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
+}
+function mergeVistorias(local, incoming) {
+  const tombA = ensureTombstones(local), tombB = ensureTombstones(incoming);
+  const report = { added: 0, updated: 0, keptLocal: 0, deletedByTombstone: 0, conflicts: [], estruturasAdicionadas: 0, codigosDuplicados: [] };
+  const mergedTombstones = { estruturas: mergeTombstoneMap(tombA.estruturas, tombB.estruturas), montantes: mergeTombstoneMap(tombA.montantes, tombB.montantes), ocorrencias: mergeTombstoneMap(tombA.ocorrencias, tombB.ocorrencias), photos: mergeTombstoneMap(tombA.photos, tombB.photos) };
+  const winnerRoot = resolveWinner(local.updatedAt, incoming.updatedAt, local, incoming);
+  let rootBase = winnerRoot === "incoming" ? { ...local, ...incoming } : { ...incoming, ...local };
+  // Loja/CD, Local, Data, Inspetor têm timestamp PRÓPRIO — não competem com "salvei o Prumo às 15h".
+  {
+    const la = local.metaUpdatedAt, ia = incoming.metaUpdatedAt;
+    const localTie = { deviceOrigin: local.metaDeviceOrigin, id: local.id, updatedAt: la };
+    const incomingTie = { deviceOrigin: incoming.metaDeviceOrigin, id: incoming.id, updatedAt: ia };
+    if ((la || ia) && resolveWinner(la, ia, localTie, incomingTie) === "incoming") {
+      rootBase = { ...rootBase, lojaCd: incoming.lojaCd, local: incoming.local, data: incoming.data, inspetor: incoming.inspetor, metaUpdatedAt: ia, metaDeviceOrigin: incoming.metaDeviceOrigin };
+    } else {
+      rootBase = { ...rootBase, lojaCd: local.lojaCd, local: local.local, data: local.data, inspetor: local.inspetor, metaUpdatedAt: la, metaDeviceOrigin: local.metaDeviceOrigin };
+    }
+  }
+  const idsSet = new Set([...(local.estruturas || []).map((e) => e.id), ...(incoming.estruturas || []).map((e) => e.id)]);
+  const localById = new Map((local.estruturas || []).map((e) => [e.id, e]));
+  const incomingById = new Map((incoming.estruturas || []).map((e) => [e.id, e]));
+  const estruturas = [...idsSet].filter((id) => {
+    const refE = maisRecente(estruturaLatestTouch(localById.get(id)), estruturaLatestTouch(incomingById.get(id)));
+    if (isTombstoned(tombA.estruturas, tombB.estruturas, id, refE)) { report.deletedByTombstone++; return false; }
+    if (!localById.has(id)) report.estruturasAdicionadas++;
+    return true;
+  }).map((id) => mergeEstrutura(localById.get(id), incomingById.get(id), tombA, tombB, report));
+  report.codigosDuplicados = detectDuplicateCodigos(estruturas);
+
+  // "finalizada" tem timestamp próprio — não compete com nenhum salvamento genérico.
+  {
+    const la = local.finalizadaUpdatedAt, ia = incoming.finalizadaUpdatedAt;
+    const localTie = { deviceOrigin: local.finalizadaDeviceOrigin, id: local.id, updatedAt: la };
+    const incomingTie = { deviceOrigin: incoming.finalizadaDeviceOrigin, id: incoming.id, updatedAt: ia };
+    if ((la || ia) && resolveWinner(la, ia, localTie, incomingTie) === "incoming") {
+      rootBase.finalizada = incoming.finalizada; rootBase.finalizadaAt = incoming.finalizadaAt; rootBase.finalizadaUpdatedAt = ia; rootBase.finalizadaDeviceOrigin = incoming.finalizadaDeviceOrigin;
+    } else {
+      rootBase.finalizada = local.finalizada; rootBase.finalizadaAt = local.finalizadaAt; rootBase.finalizadaUpdatedAt = la; rootBase.finalizadaDeviceOrigin = local.finalizadaDeviceOrigin;
+    }
+  }
+  // Se o resultado consolidado ficou com pendência real (uma estrutura trazida pelo merge que não estava
+  // completa, por exemplo), "finalizada=true" deixa de ser verdade — exige nova finalização explícita.
+  if (rootBase.finalizada) {
+    const vistoriaProvisoria = { ...rootBase, estruturas };
+    const pend = countPendingInspection(vistoriaProvisoria);
+    if (pend.total > 0) { rootBase.finalizada = false; report.finalizadaRevertidaPorPendencia = true; }
+  }
+
+  return { ...rootBase, estruturas, tombstones: mergedTombstones, updatedAt: nowIso(), lastMergeAt: nowIso(), lastMergeReport: report };
+}
+
 function compactVistoriaForStorage(v) {
   const { estruturas = [], ...root } = v;
   return {
     ...root,
-    storageSchema: 4,
+    storageSchema: 5,
     estruturas: estruturas.map((e) => {
       const { montantes = [], itensEstrutura = [], ...erest } = e;
       const estCompact = itensEstrutura.map((it) => compactStructureItemForStorage(it, Boolean(e.visualFinalizada && it.id !== "iluminacao"))).filter(Boolean);
@@ -560,14 +1510,71 @@ function syncVistoriaListEntry(target) {
   state.vistorias.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
-/* ---------------- IndexedDB ---------------- */
+/* ---------------- Verificação de Integridade de Evidências v2.18 ---------------- */
+async function checkPhotoIntegrity(vistorias) {
+  const allPhotos = await idbGetAll("photos");
+  const photoMap = new Map(allPhotos.map((p) => [p.id, p]));
+  const missing = [];
+  const valid = [];
+
+  const checkRefs = (oc, vId, context) => {
+    for (const pid of occurrencePhotoRefs(oc)) {
+      if (pid && pid.startsWith("pho_")) {
+        const rec = photoMap.get(pid);
+        const hasValidBlob = rec && rec.blob && (rec.blob.size > 0 || (rec.blob.byteLength && rec.blob.byteLength > 0));
+        if (hasValidBlob) {
+          valid.push(pid);
+        } else {
+          missing.push({
+            vistoriaId: vId,
+            occurrenceId: oc.id,
+            photoId: pid,
+            context,
+            reason: !rec ? "Registro não encontrado no store photos" : "Blob nulo ou de tamanho 0"
+          });
+        }
+      }
+    }
+  };
+
+  for (const v of vistorias) {
+    for (const e of (v.estruturas || [])) {
+      for (const it of (e.itensEstrutura || [])) {
+        for (const oc of (it.ocorrencias || [])) {
+          checkRefs(oc, v.id, `Estrutura ${e.codigo || "—"}`);
+        }
+      }
+      for (const m of (e.montantes || [])) {
+        for (const it of (m.itens || [])) {
+          for (const oc of (it.ocorrencias || [])) {
+            checkRefs(oc, v.id, `Estrutura ${e.codigo || "—"} · M${m.numero}`);
+          }
+        }
+      }
+    }
+  }
+  return { totalValid: valid.length, missing, isClean: missing.length === 0 };
+}
+
+/* ---------------- IndexedDB v4 ---------------- */
+const DB_VERSION = 4;
 let dbPromise = new Promise((resolve, reject) => {
-  const req = indexedDB.open("inspecaoPP", 2);
+  const req = indexedDB.open("inspecaoPP", DB_VERSION);
   req.onupgradeneeded = (e) => {
     const db = e.target.result;
     if (!db.objectStoreNames.contains("config")) db.createObjectStore("config");
     if (!db.objectStoreNames.contains("vistorias")) db.createObjectStore("vistorias", { keyPath: "id" });
     if (!db.objectStoreNames.contains("parts")) db.createObjectStore("parts");
+    if (!db.objectStoreNames.contains("photos")) {
+      const pStore = db.createObjectStore("photos", { keyPath: "id" });
+      pStore.createIndex("by_vistoriaId", "vistoriaId", { unique: false });
+      pStore.createIndex("by_occurrenceId", "occurrenceId", { unique: false });
+      pStore.createIndex("by_updatedAt", "updatedAt", { unique: false });
+    }
+    // photoThumbs é exclusivamente cache derivável: não participa de merge/backup/tombstones
+    if (!db.objectStoreNames.contains("photoThumbs")) {
+      db.createObjectStore("photoThumbs", { keyPath: "id" });
+    }
   };
   req.onsuccess = () => resolve(req.result);
   req.onerror = () => reject(req.error);
@@ -589,6 +1596,22 @@ async function idbSet(store, key, value) {
     req.onerror = () => reject(req.error);
   });
 }
+// Grava vários registros numa ÚNICA transação do IndexedDB: ou tudo é gravado, ou nada é
+// (se qualquer put() falhar, a transação inteira é abortada automaticamente pelo navegador).
+// items: [{ store, key, value }] — key pode ser undefined quando o store tem keyPath.
+// toDelete: [{ store, key }] — excluídos na mesma transação.
+async function idbTransactionApply(items, toDelete = []) {
+  const db = await dbPromise;
+  const stores = [...new Set([...items.map((i) => i.store), ...toDelete.map((i) => i.store)])];
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(stores, "readwrite");
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error("Transação abortada"));
+    items.forEach(({ store, key, value }) => { const os = tx.objectStore(store); key === undefined ? os.put(value) : os.put(value, key); });
+    toDelete.forEach(({ store, key }) => tx.objectStore(store).delete(key));
+  });
+}
 async function idbDelete(store, key) {
   const db = await dbPromise;
   return new Promise((resolve, reject) => {
@@ -597,6 +1620,21 @@ async function idbDelete(store, key) {
     req.onerror = () => reject(req.error);
   });
 }
+async function getDeletedVistoriaIds() {
+  return (await idbGet("config", "deletedVistorias")) || {};
+}
+async function deleteVistoriaCompletamente(id) {
+  const map = await getDeletedVistoriaIds();
+  map[id] = { deletedAt: nowIso(), deviceOrigin: getDeviceId() };
+  if (state.draftVistoria && state.draftVistoria.id === id) state.draftVistoria = null;
+  const allPhotos = await idbGetAll("photos");
+  const photosToDelete = allPhotos.filter((p) => p.vistoriaId === id).map((p) => ({ store: "photos", key: p.id }));
+  await idbTransactionApply(
+    [{ store: "config", key: "deletedVistorias", value: map }],
+    [{ store: "vistorias", key: id }, ...photosToDelete]
+  );
+  await persistVistoriaList();
+}
 async function idbGetAll(store) {
   const db = await dbPromise;
   return new Promise((resolve, reject) => {
@@ -604,6 +1642,82 @@ async function idbGetAll(store) {
     req.onsuccess = () => resolve(req.result || []);
     req.onerror = () => reject(req.error);
   });
+}
+
+/* ---------------- Migração Determinística e Retomável v2.17.6 -> v2.18 ---------------- */
+async function migrateLegacyBase64ToPhotos() {
+  try {
+    const vistorias = await idbGetAll("vistorias");
+    for (const v of vistorias) {
+      let vistoriaChanged = false;
+      const photosToPut = [];
+      const photoValidations = [];
+      
+      const checkOccurrence = async (oc) => {
+        if (!oc || !Array.isArray(oc.fotos)) return;
+        for (let idx = 0; idx < oc.fotos.length; idx++) {
+          const foto = oc.fotos[idx];
+          if (typeof foto === "string" && foto.startsWith("data:image")) {
+            const photoId = await deterministicPhotoIdFromBase64(foto, oc.id, idx);
+            const blob = base64ToBlob(foto);
+            const record = {
+              id: photoId,
+              vistoriaId: v.id,
+              occurrenceId: oc.id,
+              blob: blob,
+              mimeType: "image/jpeg",
+              size: blob.size,
+              createdAt: oc.updatedAt || v.createdAt || nowIso(),
+              deviceOrigin: oc.deviceOrigin || v.deviceOrigin || getDeviceId(),
+              updatedAt: oc.updatedAt || nowIso(),
+              deletedAt: null
+            };
+            photosToPut.push({ store: "photos", key: undefined, value: record });
+            photoValidations.push({ photoId, expectedSize: blob.size, oc, idx });
+            vistoriaChanged = true;
+          }
+        }
+      };
+
+      for (const e of (v.estruturas || [])) {
+        for (const it of (e.itensEstrutura || [])) {
+          for (const oc of (it.ocorrencias || [])) {
+            await checkOccurrence(oc);
+          }
+        }
+        for (const m of (e.montantes || [])) {
+          for (const it of (m.itens || [])) {
+            for (const oc of (it.ocorrencias || [])) {
+              await checkOccurrence(oc);
+            }
+          }
+        }
+      }
+
+      if (vistoriaChanged && photosToPut.length) {
+        // 1. Grava os Blobs no store photos
+        await idbTransactionApply(photosToPut);
+        // 2. Valida a leitura de cada Blob gravado
+        let allValid = true;
+        for (const val of photoValidations) {
+          const readBack = await idbGet("photos", val.photoId);
+          if (!readBack || !readBack.blob || readBack.blob.size !== val.expectedSize) {
+            allValid = false;
+            break;
+          }
+        }
+        // 3. Atualiza a vistoria somente após validação 100%
+        if (allValid) {
+          for (const val of photoValidations) {
+            val.oc.fotos[val.idx] = val.photoId;
+          }
+          await idbSet("vistorias", v.id, compactVistoriaForStorage(v));
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Aviso na migração de fotos:", err);
+  }
 }
 
 /* ---------------- Estado global ---------------- */
@@ -624,6 +1738,9 @@ const state = {
 };
 
 async function boot() {
+  await ensureDeviceId();
+  await migrateLegacyBase64ToPhotos();
+  try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (err) { /* segue mesmo se o navegador não suportar */ }
   const cfg = await idbGet("config", "main");
   if (!cfg) {
     state.config = DEFAULT_CONFIG;
@@ -926,6 +2043,23 @@ function HomeScreen() {
     el("img", { src: "logo-full.png", alt: state.config.empresa, style: "height:34px;display:block;margin-bottom:8px" }),
     el("h2", { style: "font-size:26px;margin-top:2px" }, "Inspeção de Porta-Pallets")));
 
+  const quotaWrap = el("div", { id: "storage-warning-wrap", style: "display:none;margin-bottom:14px" });
+  wrap.appendChild(quotaWrap);
+  checkStorageQuota().then((res) => {
+    if (res && res.isWarning) {
+      quotaWrap.style.display = "block";
+      quotaWrap.replaceChildren(
+        el("div", { class: "card", style: "background:#FFFBEB;border:1px solid #FCD34D;color:#92400E;padding:10px 14px;font-size:12.5px;line-height:1.4;display:flex;align-items:center;gap:10px" },
+          el("span", { html: svg("alert", 20, "color:#B45309;flex-shrink:0") }),
+          el("div", {},
+            el("div", { style: "font-weight:700" }, "Atenção: Quota de armazenamento concedida elevada"),
+            el("div", {}, res.message, " Recomendamos exportar backups para manter o navegador seguro.")
+          )
+        )
+      );
+    }
+  });
+
   const latestResume = rascunhos.find((v)=>v.resume && v.resume.estruturaId);
   if (latestResume) { const rc=ResumeCard(latestResume); if(rc) wrap.appendChild(rc); }
 
@@ -972,9 +2106,7 @@ function VistoriaRow(v, isDraft) {
           b.addEventListener("click", async (ev) => {
             ev.stopPropagation();
             if (confirm("Excluir este rascunho de inspeção? Essa ação não pode ser desfeita.")) {
-              if (state.draftVistoria && state.draftVistoria.id === v.id) state.draftVistoria = null;
-              await idbDelete("vistorias", v.id);
-              await persistVistoriaList();
+              await deleteVistoriaCompletamente(v.id);
               render();
             }
           });
@@ -1079,6 +2211,8 @@ async function ensureVistoria(id) {
 async function saveVistoriaObject(target) {
   if (!target) return;
   try {
+    target.updatedAt = nowIso();
+    target.deviceOrigin = target.deviceOrigin || getDeviceId();
     normalizeVistoria(target);
     await idbSet("vistorias", undefined, compactVistoriaForStorage(target));
     // Não relê todo o IndexedDB a cada toque. Mantém a lista em memória sincronizada.
@@ -1120,7 +2254,7 @@ function VistoriaScreen() {
   const header = Card({ style: "margin-bottom:14px" });
   header.appendChild(el("div", { class: "field" }, el("label", {}, "Loja / CD"),
     (() => {
-      const frag = suggestInput(v.lojaCd, (val) => { v.lojaCd = val; saveVistoriaDebounced(); }, "Digite o nome da Loja / CD", state.config.locais);
+      const frag = suggestInput(v.lojaCd, (val) => { v.lojaCd = val; touchMeta(v); saveVistoriaDebounced(); }, "Digite o nome da Loja / CD", state.config.locais);
       const input = frag.querySelector("input");
       input.addEventListener("blur", () => {
         const val = input.value.trim();
@@ -1128,10 +2262,10 @@ function VistoriaScreen() {
       });
       return frag;
     })()));
-  header.appendChild(Field("Local (cidade/UF)", inputEl(v.local, (val) => { v.local = val; saveVistoriaDebounced(); }, "Ex: Osasco - SP")));
+  header.appendChild(Field("Local (cidade/UF)", inputEl(v.local, (val) => { v.local = val; touchMeta(v); saveVistoriaDebounced(); }, "Ex: Osasco - SP")));
   header.appendChild(el("div", { class: "row2" },
-    Field("Data", inputEl(v.data, (val) => { v.data = val; saveVistoriaDebounced(); }, "", "date")),
-    Field("Inspetor(es)", inputEl(v.inspetor, (val) => { v.inspetor = val; saveVistoriaDebounced(); }, "Nome(s)"))));
+    Field("Data", inputEl(v.data, (val) => { v.data = val; touchMeta(v); saveVistoriaDebounced(); }, "", "date")),
+    Field("Inspetor(es)", inputEl(v.inspetor, (val) => { v.inspetor = val; touchMeta(v); saveVistoriaDebounced(); }, "Nome(s)"))));
   header.appendChild(el("div", { id: "save-indicator", class: "save-indicator" }, "✓ Salvo no aparelho"));
   inner.appendChild(header);
 
@@ -1194,10 +2328,7 @@ function VistoriaScreen() {
     el("span", { html: svg("trash", 15) }), " Excluir este rascunho");
   deleteDraftBtn.addEventListener("click", async () => {
     if (confirm("Excluir este rascunho de inspeção? Essa ação não pode ser desfeita.")) {
-      const id = v.id;
-      state.draftVistoria = null;
-      await idbDelete("vistorias", id);
-      await persistVistoriaList();
+      await deleteVistoriaCompletamente(v.id);
       go("home");
     }
   });
@@ -1213,7 +2344,7 @@ function EstruturaRow(e, v) {
   const steps=[vp.complete?"Visual ✓":`Visual ${vp.done}/${vp.total}`,pp.complete?"Prumo ✓":`Prumo ${pp.done}/${pp.total}`,lp.complete?"Lux ✓":(lp.measurements?`Lux ${lp.measurements} med.`:"Lux —")];
   const row=el("div",{class:"insp-row",onclick:()=>go("estrutura",v.id,e.id)},
     el("div",{},el("div",{class:"insp-code"},e.codigo||"(sem código ainda)"),el("div",{class:"insp-sub"},[e.rua&&"Rua "+e.rua,e.lado&&"Lado "+e.lado,nMont+" montante"+(nMont===1?"":"s")].filter(Boolean).join(" · ")),el("div",{class:"stage-inline"},steps.join("  ·  "))),
-    el("div",{style:"display:flex;align-items:center;gap:8px"},Tag(st,"sm"),(()=>{const b=el("button",{style:"background:none;border:none;color:var(--ink-faint)",html:svg("trash",15)});b.addEventListener("click",(ev)=>{ev.stopPropagation();if(confirm("Remover esta estrutura da vistoria?")){v.estruturas=v.estruturas.filter((x)=>x.id!==e.id);saveVistoriaNow().then(render);}});return b;})()));
+    el("div",{style:"display:flex;align-items:center;gap:8px"},Tag(st,"sm"),(()=>{const b=el("button",{style:"background:none;border:none;color:var(--ink-faint)",html:svg("trash",15)});b.addEventListener("click",(ev)=>{ev.stopPropagation();if(confirm("Remover esta estrutura da vistoria?")){recordTombstone(v,"estruturas",e.id);v.estruturas=v.estruturas.filter((x)=>x.id!==e.id);saveVistoriaNow().then(render);}});return b;})()));
   return Card({style:"padding:0;cursor:pointer"},row);
 }
 function submitVistoria(v, errBox) {
@@ -1234,6 +2365,7 @@ function submitVistoria(v, errBox) {
   if (luxPendente) return showErr(`A etapa de iluminação/Lux da estrutura ${luxPendente.codigo || "—"} ainda não foi finalizada.`);
   v.finalizada = true;
   v.finalizadaAt = new Date().toISOString();
+  v.finalizadaUpdatedAt = nowIso(); v.finalizadaDeviceOrigin = getDeviceId();
   delete v.resume;
   saveVistoriaObject(v).then(() => {
     const id = v.id;
@@ -1261,17 +2393,17 @@ function EstruturaSetupScreen(v, e) {
   const previous=(v.estruturas||[]).filter((x)=>x.id!==e.id&&x.setupComplete).slice(-1)[0]||null;
   const intro=el("div",{class:"setup-intro"},el("div",{class:"setup-kicker"},"NOVA ESTRUTURA"),el("h2",{},"Identifique e comece"),el("p",{},"Use as sugestões herdadas da estrutura anterior. Digite somente o que realmente mudou."));wrap.appendChild(intro);
   const card=Card({class:"structure-setup-card"});
-  const code=inputEl(e.codigo,(val)=>{e.codigo=val;saveVistoriaDebounced();},"Ex: E-018");code.autocapitalize="characters";code.enterKeyHint="next";card.appendChild(Field("Código da estrutura",code));
-  card.appendChild(choiceOrCustomField("Setor",e.setor,state.config.setores,(val)=>{e.setor=val;saveVistoriaDebounced();},"Digite o setor"));
-  const loc=el("div",{class:"setup-location-grid"});const rua=inputEl(e.rua,(val)=>{e.rua=val;saveVistoriaDebounced();},"Ex: 08");rua.enterKeyHint="done";loc.appendChild(Field("Rua / corredor",rua));loc.appendChild(choiceOrCustomField("Lado",e.lado,["DIREITO","ESQUERDO","AMBOS","ÍMPAR","PAR"],(val)=>{e.lado=val;saveVistoriaDebounced();},"Digite o lado"));card.appendChild(loc);
-  card.appendChild(choiceOrCustomField("Tipo de estrutura",e.tipoEstrutura,state.config.tiposEstrutura,(val)=>{e.tipoEstrutura=val;saveVistoriaDebounced();},"Digite o tipo"));
-  card.appendChild(choiceOrCustomField("Fabricante padrão",e.fabricante,state.config.fabricantes,(val)=>{e.fabricante=val;saveVistoriaDebounced();},"Digite o fabricante"));
-  const more=el("details",{class:"setup-more"});more.appendChild(el("summary",{},"＋ Mais detalhes (opcional)"));const moreBody=el("div",{class:"setup-more-body"});const obs=el("textarea",{class:"input",rows:2,placeholder:"Altura, adaptações, interferências…"});obs.value=e.observacoesGerais||"";obs.addEventListener("input",()=>{e.observacoesGerais=obs.value;saveVistoriaDebounced();});moreBody.appendChild(Field("Observações gerais",obs));more.appendChild(moreBody);card.appendChild(more);
+  const code=inputEl(e.codigo,(val)=>{e.codigo=val;touchMeta(e);saveVistoriaDebounced();},"Ex: E-018");code.autocapitalize="characters";code.enterKeyHint="next";card.appendChild(Field("Código da estrutura",code));
+  card.appendChild(choiceOrCustomField("Setor",e.setor,state.config.setores,(val)=>{e.setor=val;touchMeta(e);saveVistoriaDebounced();},"Digite o setor"));
+  const loc=el("div",{class:"setup-location-grid"});const rua=inputEl(e.rua,(val)=>{e.rua=val;touchMeta(e);saveVistoriaDebounced();},"Ex: 08");rua.enterKeyHint="done";loc.appendChild(Field("Rua / corredor",rua));loc.appendChild(choiceOrCustomField("Lado",e.lado,["DIREITO","ESQUERDO","AMBOS","ÍMPAR","PAR"],(val)=>{e.lado=val;touchMeta(e);saveVistoriaDebounced();},"Digite o lado"));card.appendChild(loc);
+  card.appendChild(choiceOrCustomField("Tipo de estrutura",e.tipoEstrutura,state.config.tiposEstrutura,(val)=>{e.tipoEstrutura=val;touchMeta(e);saveVistoriaDebounced();},"Digite o tipo"));
+  card.appendChild(choiceOrCustomField("Fabricante padrão",e.fabricante,state.config.fabricantes,(val)=>{e.fabricante=val;touchMeta(e);saveVistoriaDebounced();},"Digite o fabricante"));
+  const more=el("details",{class:"setup-more"});more.appendChild(el("summary",{},"＋ Mais detalhes (opcional)"));const moreBody=el("div",{class:"setup-more-body"});const obs=el("textarea",{class:"input",rows:2,placeholder:"Altura, adaptações, interferências…"});obs.value=e.observacoesGerais||"";obs.addEventListener("input",()=>{e.observacoesGerais=obs.value;touchMeta(e);saveVistoriaDebounced();});moreBody.appendChild(Field("Observações gerais",obs));more.appendChild(moreBody);card.appendChild(more);
   card.appendChild(el("div",{id:"save-indicator",class:"save-indicator"},"✓ Salvo no aparelho"));wrap.appendChild(card);
   if(previous){wrap.appendChild(el("div",{class:"setup-inherited-note"},"Dados sugeridos com base em ",el("strong",{},previous.codigo||"estrutura anterior"),". Você pode alterar qualquer campo."));}
   const err=el("div",{class:"setup-error"});wrap.appendChild(err);
   const startBtn=el("button",{class:"setup-start-btn"},"CRIAR E INICIAR INSPEÇÃO →");startBtn.addEventListener("click",async()=>{err.textContent="";if(!String(e.codigo||"").trim()){err.textContent="Informe o código da estrutura.";code.focus();return;}e.setupComplete=true;let m=(e.montantes||[])[0]||addNextMontante(e);setResume(v,"visual",e,m);if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();await saveVistoriaNow();go("montante",v.id,e.id,m.id);});wrap.appendChild(startBtn);
-  const cancel=el("button",{class:"setup-cancel-btn"},"Cancelar nova estrutura");cancel.addEventListener("click",async()=>{if((e.montantes||[]).length||montanteProblemEntries(e).length)return go("vistoria",v.id);if(!confirm("Cancelar e remover esta nova estrutura?"))return;v.estruturas=(v.estruturas||[]).filter((x)=>x.id!==e.id);await saveVistoriaNow();go("vistoria",v.id);});wrap.appendChild(cancel);
+  const cancel=el("button",{class:"setup-cancel-btn"},"Cancelar nova estrutura");cancel.addEventListener("click",async()=>{if((e.montantes||[]).length||montanteProblemEntries(e).length)return go("vistoria",v.id);if(!confirm("Cancelar e remover esta nova estrutura?"))return;recordTombstone(v,"estruturas",e.id);v.estruturas=(v.estruturas||[]).filter((x)=>x.id!==e.id);await saveVistoriaNow();go("vistoria",v.id);});wrap.appendChild(cancel);
   return wrap;
 }
 function EstruturaScreen() {
@@ -1284,7 +2416,7 @@ function EstruturaScreen() {
   const wrap=el("div",{style:"padding-bottom:86px"});const inner=el("div",{class:"screen structure-screen",style:"padding-top:14px"});wrap.appendChild(inner);
   const totalAnom=montanteProblemEntries(e).length+estruturaProblemOccurrences(e).length;const vp=visualProgress(e),pp=prumoProgress(e),lp=luxProgress(e);
   const summary=Card({class:"structure-summary",style:"margin-bottom:10px"});summary.appendChild(el("div",{class:"structure-summary-row"},el("div",{},el("div",{class:"structure-code"},e.codigo||"Estrutura"),el("div",{class:"structure-sub"},[e.rua&&`Rua ${e.rua}`,e.lado,e.setor,e.tipoEstrutura,e.fabricante].filter(Boolean).join(" · "))),el("div",{class:"structure-anom"},el("strong",{},String(totalAnom)),el("span",{},"anom."))));
-  const details=el("details",{class:"structure-details"});details.appendChild(el("summary",{},"Editar dados da estrutura"));const edit=el("div",{class:"structure-edit-body"});edit.appendChild(Field("Código",inputEl(e.codigo,(val)=>{e.codigo=val;saveVistoriaDebounced();},"Código")));edit.appendChild(el("div",{class:"row2"},choiceOrCustomField("Setor",e.setor,state.config.setores,(val)=>{e.setor=val;saveVistoriaDebounced();}),choiceOrCustomField("Tipo",e.tipoEstrutura,state.config.tiposEstrutura,(val)=>{e.tipoEstrutura=val;saveVistoriaDebounced();})));edit.appendChild(el("div",{class:"row2"},Field("Rua",inputEl(e.rua,(val)=>{e.rua=val;saveVistoriaDebounced();},"Rua")),choiceOrCustomField("Lado",e.lado,["DIREITO","ESQUERDO","AMBOS","ÍMPAR","PAR"],(val)=>{e.lado=val;saveVistoriaDebounced();})));edit.appendChild(choiceOrCustomField("Fabricante",e.fabricante,state.config.fabricantes,(val)=>{e.fabricante=val;saveVistoriaDebounced();}));const obs=el("textarea",{class:"input",rows:2,placeholder:"Observações gerais"});obs.value=e.observacoesGerais||"";obs.addEventListener("input",()=>{e.observacoesGerais=obs.value;saveVistoriaDebounced();});edit.appendChild(Field("Observações",obs));edit.appendChild(el("div",{id:"save-indicator",class:"save-indicator"},"✓ Salvo no aparelho"));details.appendChild(edit);summary.appendChild(details);inner.appendChild(summary);
+  const details=el("details",{class:"structure-details"});details.appendChild(el("summary",{},"Editar dados da estrutura"));const edit=el("div",{class:"structure-edit-body"});edit.appendChild(Field("Código",inputEl(e.codigo,(val)=>{e.codigo=val;touchMeta(e);saveVistoriaDebounced();},"Código")));edit.appendChild(el("div",{class:"row2"},choiceOrCustomField("Setor",e.setor,state.config.setores,(val)=>{e.setor=val;touchMeta(e);saveVistoriaDebounced();}),choiceOrCustomField("Tipo",e.tipoEstrutura,state.config.tiposEstrutura,(val)=>{e.tipoEstrutura=val;touchMeta(e);saveVistoriaDebounced();})));edit.appendChild(el("div",{class:"row2"},Field("Rua",inputEl(e.rua,(val)=>{e.rua=val;touchMeta(e);saveVistoriaDebounced();},"Rua")),choiceOrCustomField("Lado",e.lado,["DIREITO","ESQUERDO","AMBOS","ÍMPAR","PAR"],(val)=>{e.lado=val;touchMeta(e);saveVistoriaDebounced();})));edit.appendChild(choiceOrCustomField("Fabricante",e.fabricante,state.config.fabricantes,(val)=>{e.fabricante=val;touchMeta(e);saveVistoriaDebounced();}));const obs=el("textarea",{class:"input",rows:2,placeholder:"Observações gerais"});obs.value=e.observacoesGerais||"";obs.addEventListener("input",()=>{e.observacoesGerais=obs.value;touchMeta(e);saveVistoriaDebounced();});edit.appendChild(Field("Observações",obs));edit.appendChild(el("div",{id:"save-indicator",class:"save-indicator"},"✓ Salvo no aparelho"));details.appendChild(edit);summary.appendChild(details);inner.appendChild(summary);
 
   if(!e.visualFinalizada){
     const action=Card({class:"visual-continue-card"});action.appendChild(el("div",{class:"visual-continue-kicker"},"INSPEÇÃO VISUAL"));action.appendChild(el("div",{class:"visual-continue-main"},vp.total?`${vp.done} de ${vp.total} montantes revisados`:"Pronto para começar"));action.appendChild(el("div",{class:"visual-continue-sub"},"O próximo montante é criado automaticamente. Não é necessário informar o total."));const b=el("button",{class:"visual-continue-btn"},vp.total?"▶ CONTINUAR INSPEÇÃO VISUAL":"▶ INICIAR NO MONTANTE 001");b.addEventListener("click",async()=>{const m=startFirstVisualMontante(v,e);await saveVistoriaNow();go("montante",v.id,e.id,m.id);});action.appendChild(b);inner.appendChild(action);
@@ -1321,38 +2453,39 @@ function EstruturaItemScreen() {
   wrap.appendChild(el("div", { id: "save-indicator", class: "save-indicator", style: "margin-bottom:14px" }, "✓ Salvo no aparelho"));
   if (it.tipo !== "medicao" && !(it.ocorrencias || []).length) {
     const okBtn = el("button", { class: "field-ok-btn", style: "width:100%;margin-bottom:14px" }, "✓ Conforme — sem ocorrência");
-    okBtn.addEventListener("click", async () => { it.revisado = true; await saveVistoriaNow(); go("estrutura", v.id, e.id); }); wrap.appendChild(okBtn);
+    okBtn.addEventListener("click", async () => { it.revisado = true; touchItem(it); touchStage(e,"visual"); await saveVistoriaNow(); go("estrutura", v.id, e.id); }); wrap.appendChild(okBtn);
   }
   const list = el("div", { style: "display:flex;flex-direction:column;gap:10px;margin-bottom:14px" });
-  (it.ocorrencias || []).forEach((oc, idx) => list.appendChild(OcorrenciaCard(oc, idx, it))); wrap.appendChild(list);
+  (it.ocorrencias || []).forEach((oc, idx) => list.appendChild(OcorrenciaCard(oc, idx, it, e))); wrap.appendChild(list);
   const addBtn = el("button", { class: "ghost-btn touch-btn", style: "width:100%;display:flex;align-items:center;justify-content:center;gap:6px" }, el("span", { html: svg("plus", 16) }), it.tipo === "medicao" ? "Adicionar aferição" : "Adicionar ocorrência");
   addBtn.addEventListener("click", async () => {
     if (it.tipo !== "medicao") return startNewAnomaly(v,e,null,it,null,"estrutura");
-    it.ocorrencias = it.ocorrencias || []; it.ocorrencias.push(newOcorrencia("pendente")); await saveVistoriaNow(); render();
+    const novaOc = touchOccurrence(newOcorrencia("pendente"));
+    it.ocorrencias = it.ocorrencias || []; it.ocorrencias.push(novaOc); touchItem(it); touchStage(e,"lux"); await saveVistoriaNow(); render();
   }); wrap.appendChild(addBtn);
   if (it.tipo === "medicao" && !(it.ocorrencias || []).length) wrap.appendChild(el("div", { class: "field-mode-hint", style: "margin-top:8px" }, "Registre pelo menos uma aferição. O status será calculado automaticamente pelo limite configurado."));
   const backBtn = el("button", { class: "submit-btn", style: "width:100%;margin-top:16px" }, "Voltar para a estrutura"); backBtn.addEventListener("click", async () => { await saveVistoriaNow(); go("estrutura", v.id, e.id); }); wrap.appendChild(backBtn); return wrap;
 }
-function OcorrenciaCard(oc, idx, it) {
+function OcorrenciaCard(oc, idx, it, e) {
   normalizeOccurrence(oc, it, it.tipo === "medicao" ? "pendente" : "problema");
   const card = Card({ class: "occurrence-card", style: "padding:12px" });
   const st = ocorrenciaStatus(oc, it);
   card.appendChild(el("div", { class: "occurrence-head" },
     el("div", {}, el("div", { style: "font-weight:700;font-size:13px" }, it.tipo === "medicao" ? `Aferição ${idx + 1}` : `Ocorrência ${idx + 1}`), Tag(st, "sm")),
-    (() => { const b=el("button",{class:"icon-btn",html:svg("trash",15)}); b.addEventListener("click",async()=>{if(confirm("Remover este registro?")){it.ocorrencias.splice(idx,1);await saveVistoriaNow();render();}});return b; })()));
-  card.appendChild(Field("Montante / posição de referência", inputEl(oc.montanteRef, (val) => { oc.montanteRef = val; saveVistoriaDebounced(); }, "Ex: Montante 5")));
+    (() => { const b=el("button",{class:"icon-btn",html:svg("trash",15)}); b.addEventListener("click",async()=>{if(confirm("Remover este registro?")){recordTombstone(state.draftVistoria,"ocorrencias",oc.id);it.ocorrencias.splice(idx,1);touchItem(it);touchStage(e,stageForItem(it));await saveVistoriaNow();render();}});return b; })()));
+  card.appendChild(Field("Montante / posição de referência", inputEl(oc.montanteRef, (val) => { oc.montanteRef = val; touchOccurrenceFull(oc,it,e); saveVistoriaDebounced(); }, "Ex: Montante 5")));
   if (it.tipo === "medicao") {
-    const inp=inputEl(oc.valor,(val)=>{oc.valor=val;oc.status=statusFromMedicao(val,it.min);saveVistoriaDebounced();},`Mínimo ${it.min}`,"number");
+    const inp=inputEl(oc.valor,(val)=>{oc.valor=val;oc.status=statusFromMedicao(val,it.min);touchOccurrenceFull(oc,it,e);saveVistoriaDebounced();},`Mínimo ${it.min}`,"number");
     card.appendChild(Field(`Valor medido (${it.unidade})`, inp));
     card.appendChild(el("div",{class:"measurement-hint"},oc.valor ? (statusFromMedicao(oc.valor,it.min)==="ok" ? `✓ Dentro do limite (≥ ${it.min} ${it.unidade})` : `⚠ Abaixo do limite (${it.min} ${it.unidade})`) : `Limite mínimo: ${it.min} ${it.unidade}`));
   }
-  if (it.descOpcoes) card.appendChild(Field("Descrição", suggestInput(oc.descTxt, (val) => { oc.descTxt = val; oc.status = ocorrenciaStatus(oc,it); saveVistoriaDebounced(); }, "Digite a descrição", it.descOpcoes)));
-  if (it.tipoOpcoes) card.appendChild(Field("Tipo", suggestInput(oc.tipoTxt, (val) => { oc.tipoTxt = val; saveVistoriaDebounced(); }, "Digite o tipo/componente", it.tipoOpcoes)));
-  if (it.localOpcoes) card.appendChild(Field(it.localLabel || "Localização", suggestInput(oc.localTxt, (val) => { oc.localTxt = val; saveVistoriaDebounced(); }, "Digite a localização", it.localOpcoes)));
-  if (it.tipo !== "medicao") card.appendChild(Field("Grau", suggestInput(oc.grauTxt, (val) => { oc.grauTxt = val; saveVistoriaDebounced(); }, "Leve, Médio, Grave, Gravíssimo", GRAU_OPCOES)));
-  card.appendChild(Field("Quantidade", inputEl(oc.qtd == null ? 1 : oc.qtd, (val) => { oc.qtd = val; saveVistoriaDebounced(); }, "1", "number")));
-  const obsBox=el("textarea",{class:"input",rows:2,placeholder:"Observação (opcional)"}); obsBox.value=oc.obs||""; obsBox.addEventListener("input",(ev)=>{oc.obs=ev.target.value;saveVistoriaDebounced();}); card.appendChild(el("div",{class:"field"},el("label",{},"Observações"),obsBox));
-  const photoWrap=el("div",{style:"margin-top:4px"}); renderPhotoArea(photoWrap,oc); card.appendChild(photoWrap);
+  if (it.descOpcoes) card.appendChild(Field("Descrição", suggestInput(oc.descTxt, (val) => { oc.descTxt = val; oc.status = ocorrenciaStatus(oc,it); touchOccurrenceFull(oc,it,e); saveVistoriaDebounced(); }, "Digite a descrição", it.descOpcoes)));
+  if (it.tipoOpcoes) card.appendChild(Field("Tipo", suggestInput(oc.tipoTxt, (val) => { oc.tipoTxt = val; touchOccurrenceFull(oc,it,e); saveVistoriaDebounced(); }, "Digite o tipo/componente", it.tipoOpcoes)));
+  if (it.localOpcoes) card.appendChild(Field(it.localLabel || "Localização", suggestInput(oc.localTxt, (val) => { oc.localTxt = val; touchOccurrenceFull(oc,it,e); saveVistoriaDebounced(); }, "Digite a localização", it.localOpcoes)));
+  if (it.tipo !== "medicao") card.appendChild(Field("Grau", suggestInput(oc.grauTxt, (val) => { oc.grauTxt = val; touchOccurrenceFull(oc,it,e); saveVistoriaDebounced(); }, "Leve, Médio, Grave, Gravíssimo", GRAU_OPCOES)));
+  card.appendChild(Field("Quantidade", inputEl(oc.qtd == null ? 1 : oc.qtd, (val) => { oc.qtd = val; touchOccurrenceFull(oc,it,e); saveVistoriaDebounced(); }, "1", "number")));
+  const obsBox=el("textarea",{class:"input",rows:2,placeholder:"Observação (opcional)"}); obsBox.value=oc.obs||""; obsBox.addEventListener("input",(ev)=>{oc.obs=ev.target.value;touchOccurrenceFull(oc,it,e);saveVistoriaDebounced();}); card.appendChild(el("div",{class:"field"},el("label",{},"Observações"),obsBox));
+  const photoWrap=el("div",{style:"margin-top:4px"}); renderPhotoArea(photoWrap,oc,()=>touchOccurrenceFull(oc,it,e)); card.appendChild(photoWrap);
   return card;
 }
 function MontanteRow(m, e, v) {
@@ -1387,8 +2520,9 @@ function FamilySection(familia, itensFamilia, e, m) {
       ev.stopPropagation();
       itensFamilia.forEach((it) => {
         if (montanteItemStatus(it) !== "pendente") return;
-        it.revisado = true; it.status = "ok"; syncMontanteItemStatus(it);
+        it.revisado = true; it.status = "ok"; syncMontanteItemStatus(it); touchItem(it);
       });
+      touchMontante(m, e);
       await saveVistoriaNow();
       render();
     });
@@ -1436,7 +2570,7 @@ function NewAnomalyScreen() {
   const optional=el("details",{class:"anomaly-optional"}); optional.appendChild(el("summary",{},"＋ Observação (opcional)")); const obs=el("textarea",{class:"input",rows:2,placeholder:"Observação adicional"}); obs.value=oc.obs||""; obs.addEventListener("input",()=>{oc.obs=obs.value;}); optional.appendChild(obs); card.appendChild(optional);
   const photos=el("div",{style:"margin-top:10px"}); renderPhotoArea(photos,oc); card.appendChild(photos); wrap.appendChild(card);
   const actions=el("div",{class:"draft-actions"}); const cancel=el("button",{class:"ghost-btn touch-btn"},"Cancelar"); cancel.addEventListener("click",cancelDraftAnomaly);
-  const save=el("button",{class:"field-next-btn"},"✓ Salvar anomalia"); save.addEventListener("click",async()=>{if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();const msg=validateAnomalyOccurrence(oc,item);if(msg){err.textContent=msg;err.style.display="block";err.scrollIntoView({block:"center"});return;}item.ocorrencias=item.ocorrencias||[];item.ocorrencias.push(normalizeOccurrence(oc,item,"problema"));if(level==="montante"){item.status="problema";syncMontanteItemStatus(item);}else{item.revisado=true;}state.draftOccurrence=null;await saveVistoriaNow();if(level==="estrutura"&&!m)return go("estrutura",v.id,e.id);go("montante",v.id,e.id,m.id);});
+  const save=el("button",{class:"field-next-btn"},"✓ Salvar anomalia"); save.addEventListener("click",async()=>{if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();const msg=validateAnomalyOccurrence(oc,item);if(msg){err.textContent=msg;err.style.display="block";err.scrollIntoView({block:"center"});return;}item.ocorrencias=item.ocorrencias||[];item.ocorrencias.push(touchOccurrence(normalizeOccurrence(oc,item,"problema")));if(level==="montante"){item.status="problema";syncMontanteItemStatus(item);touchItem(item);touchStage(e,"visual");}else{item.revisado=true;touchItem(item);touchStage(e,"visual");}state.draftOccurrence=null;await saveVistoriaNow();if(level==="estrutura"&&!m)return go("estrutura",v.id,e.id);go("montante",v.id,e.id,m.id);});
   actions.appendChild(cancel); actions.appendChild(save); wrap.appendChild(actions); return wrap;
 }
 function MontanteScreen() {
@@ -1445,7 +2579,7 @@ function MontanteScreen() {
   (m.itens||[]).forEach(normalizeMontanteItem);setResume(v,"visual",e,m);const visualItems=visualItemsMontante(m,e);const anom=montanteProblemEntries({...e,montantes:[m]}).filter(({item})=>item.id!=="prumo").length;const done=visualMontanteDone(m,e);const ord=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero);const idx=ord.findIndex((x)=>x.id===m.id);const prev=ord[idx-1];const isLast=idx===ord.length-1;
   const hero=Card({class:"montante-hero compact"});hero.appendChild(el("div",{class:"montante-context"},`VISUAL · ${e.codigo||"—"}${e.rua?" · Rua "+e.rua:""}${e.lado?" · "+e.lado:""}`));hero.appendChild(el("div",{class:"montante-number"},"MONTANTE ",el("strong",{},String(m.numero).padStart(3,"0"))));hero.appendChild(el("div",{class:"montante-meta"},el("span",{},anom?`${anom} anomalia${anom===1?"":"s"}`:"sem anomalias"),el("span",{},done?"✓ visual concluído":"em revisão"),el("span",{id:"save-indicator",class:"save-indicator"},"✓ salvo")));inner.appendChild(hero);
 
-  const context=el("details",{class:"card compact-details",style:"margin-top:8px"});const chips=el("div",{class:"context-chips"},el("span",{class:"context-chip"},m.tipoMontante||"Tipo não informado"),el("span",{class:"context-chip"},m.fabricante||e.fabricante||"Fabricante não informado"));context.appendChild(el("summary",{},chips,el("span",{class:"edit-hint"},"alterar")));const body=el("div",{class:"compact-details-body"});body.appendChild(choiceOrCustomField("Tipo / corte",m.tipoMontante,["GÔNDOLA","CHÃO","LONGARINA MÓVEL","ÚLTIMO MONTANTE"],(val)=>{m.tipoMontante=val;saveVistoriaDebounced();},"Digite o tipo"));body.appendChild(choiceOrCustomField("Fabricante",m.fabricante||e.fabricante,state.config.fabricantes,(val)=>{m.fabricante=val;saveVistoriaDebounced();},"Digite o fabricante"));const obs=el("textarea",{class:"input",rows:2,placeholder:"Observação deste montante (opcional)"});obs.value=m.observacoes||"";obs.addEventListener("input",()=>{m.observacoes=obs.value;saveVistoriaDebounced();});body.appendChild(Field("Observação",obs));context.appendChild(body);inner.appendChild(context);
+  const context=el("details",{class:"card compact-details",style:"margin-top:8px"});const chips=el("div",{class:"context-chips"},el("span",{class:"context-chip"},m.tipoMontante||"Tipo não informado"),el("span",{class:"context-chip"},m.fabricante||e.fabricante||"Fabricante não informado"));context.appendChild(el("summary",{},chips,el("span",{class:"edit-hint"},"alterar")));const body=el("div",{class:"compact-details-body"});body.appendChild(choiceOrCustomField("Tipo / corte",m.tipoMontante,["GÔNDOLA","CHÃO","LONGARINA MÓVEL","ÚLTIMO MONTANTE"],(val)=>{m.tipoMontante=val;touchMontanteMeta(m,e);saveVistoriaDebounced();},"Digite o tipo"));body.appendChild(choiceOrCustomField("Fabricante",m.fabricante||e.fabricante,state.config.fabricantes,(val)=>{m.fabricante=val;touchMontanteMeta(m,e);saveVistoriaDebounced();},"Digite o fabricante"));const obs=el("textarea",{class:"input",rows:2,placeholder:"Observação deste montante (opcional)"});obs.value=m.observacoes||"";obs.addEventListener("input",()=>{m.observacoes=obs.value;touchMontanteMeta(m,e);saveVistoriaDebounced();});body.appendChild(Field("Observação",obs));context.appendChild(body);inner.appendChild(context);
 
   const quick=el("div",{class:"quick-action-grid visual-actions"});const btnAnom=el("button",{class:"quick-anomaly-btn"},el("span",{html:svg("alert",20)}),el("span",{},"Registrar anomalia"));const btnChecklist=el("button",{class:"quick-secondary-btn"},el("span",{html:svg("search",19)}),el("span",{},"Buscar checklist"));quick.appendChild(btnAnom);quick.appendChild(btnChecklist);inner.appendChild(quick);
   const last=lastVisualAnomalyBefore(e,m);if(last){const repeat=el("button",{class:"repeat-anomaly-btn"},el("span",{html:svg("clock",17)}),el("span",{},`Repetir última: ${last.item.codigo} · ${last.item.nome}`));repeat.addEventListener("click",()=>{const current=(m.itens||[]).find((it)=>it.id===last.item.id);if(current)startNewAnomaly(v,e,m,current,last.oc);});inner.appendChild(repeat);}
@@ -1457,9 +2591,9 @@ function MontanteScreen() {
 
   if(anom){const existing=Card({class:"field-existing-anomalies",style:"margin-top:10px"});existing.appendChild(el("div",{class:"picker-title"},`Anomalias registradas neste montante (${anom})`));const seen=new Set();montanteProblemEntries({...e,montantes:[m]}).filter(({item})=>item.id!=="prumo").forEach(({item})=>{if(seen.has(item.id))return;seen.add(item.id);const b=el("button",{class:"picker-item"},el("span",{},CodeBadge(item.codigo),item.nome),el("span",{html:svg("chevronRight",15)}));b.addEventListener("click",()=>{state.itemDetailReturn="montante";go("itemDetail",v.id,e.id,m.id,null,item.id);});existing.appendChild(b);});inner.appendChild(existing);}
 
-  if(isLast&&prev&&!montanteHasInspectionActivity(m)&&!e.visualFinalizada){const recover=el("button",{class:"last-montante-recovery"},"← A ESTRUTURA TERMINOU NO MONTANTE ANTERIOR");recover.addEventListener("click",async()=>{if(!confirm(`Remover o Montante ${m.numero} e finalizar a estrutura ${e.codigo||"—"} no Montante ${prev.numero}?`))return;e.montantes=e.montantes.filter((x)=>x.id!==m.id);completeMontanteVisualAsInspected(prev,e);const faltantes=(e.montantes||[]).filter((x)=>!visualMontanteDone(x,e));if(faltantes.length){alert(`Ainda há ${faltantes.length} montante(s) não concluído(s).`);return;}completeStructureVisualAsInspected(e);e.ultimoMontante=prev.numero;delete v.resume;await saveVistoriaNow();go("estrutura",v.id,e.id);});inner.appendChild(recover);}
+  if(isLast&&prev&&!montanteHasInspectionActivity(m)&&!e.visualFinalizada){const recover=el("button",{class:"last-montante-recovery"},"← A ESTRUTURA TERMINOU NO MONTANTE ANTERIOR");recover.addEventListener("click",async()=>{if(!confirm(`Remover o Montante ${m.numero} e finalizar a estrutura ${e.codigo||"—"} no Montante ${prev.numero}?`))return;recordTombstone(v,"montantes",m.id);e.montantes=e.montantes.filter((x)=>x.id!==m.id);completeMontanteVisualAsInspected(prev,e);const faltantes=(e.montantes||[]).filter((x)=>!visualMontanteDone(x,e));if(faltantes.length){alert(`Ainda há ${faltantes.length} montante(s) não concluído(s).`);return;}completeStructureVisualAsInspected(e);e.ultimoMontante=prev.numero;delete v.resume;await saveVistoriaNow();go("estrutura",v.id,e.id);});inner.appendChild(recover);}
 
-  const nav=el("div",{class:"field-secondary-row"});const bprev=el("button",{class:"ghost-btn touch-btn"},"◀ Anterior");bprev.disabled=!prev;if(!prev)bprev.style.opacity=".4";bprev.addEventListener("click",async()=>{if(prev){setResume(v,"visual",e,prev);await saveVistoriaNow();go("montante",v.id,e.id,prev.id);}});nav.appendChild(bprev);const options=el("details",{class:"field-options"});options.appendChild(el("summary",{},"⋯ Opções"));const menu=el("div",{class:"field-options-menu"});if(isLast&&!e.visualFinalizada){const finish=el("button",{},"Encerrar estrutura neste montante");finish.addEventListener("click",async()=>{if(!confirm(`Finalizar a inspeção visual da estrutura ${e.codigo||"—"} com ${m.numero} montante(s)?`))return;completeMontanteVisualAsInspected(m,e);const faltantes=(e.montantes||[]).filter((x)=>!visualMontanteDone(x,e));if(faltantes.length){alert(`Ainda há ${faltantes.length} montante(s) não concluído(s).`);return;}completeStructureVisualAsInspected(e);e.ultimoMontante=m.numero;delete v.resume;await saveVistoriaNow();go("estrutura",v.id,e.id);});menu.appendChild(finish);const del=el("button",{class:"danger-option"},"Excluir este montante");del.addEventListener("click",async()=>{if(!confirm(montanteHasActivity(m)?"Este montante possui dados. Excluir mesmo assim?":"Excluir este montante vazio?"))return;e.montantes=e.montantes.filter((x)=>x.id!==m.id);await saveVistoriaNow();if(prev)go("montante",v.id,e.id,prev.id);else go("estrutura",v.id,e.id);});menu.appendChild(del);}options.appendChild(menu);nav.appendChild(options);inner.appendChild(nav);
+  const nav=el("div",{class:"field-secondary-row"});const bprev=el("button",{class:"ghost-btn touch-btn"},"◀ Anterior");bprev.disabled=!prev;if(!prev)bprev.style.opacity=".4";bprev.addEventListener("click",async()=>{if(prev){setResume(v,"visual",e,prev);await saveVistoriaNow();go("montante",v.id,e.id,prev.id);}});nav.appendChild(bprev);const options=el("details",{class:"field-options"});options.appendChild(el("summary",{},"⋯ Opções"));const menu=el("div",{class:"field-options-menu"});if(isLast&&!e.visualFinalizada){const finish=el("button",{},"Encerrar estrutura neste montante");finish.addEventListener("click",async()=>{if(!confirm(`Finalizar a inspeção visual da estrutura ${e.codigo||"—"} com ${m.numero} montante(s)?`))return;completeMontanteVisualAsInspected(m,e);const faltantes=(e.montantes||[]).filter((x)=>!visualMontanteDone(x,e));if(faltantes.length){alert(`Ainda há ${faltantes.length} montante(s) não concluído(s).`);return;}completeStructureVisualAsInspected(e);e.ultimoMontante=m.numero;delete v.resume;await saveVistoriaNow();go("estrutura",v.id,e.id);});menu.appendChild(finish);const del=el("button",{class:"danger-option"},"Excluir este montante");del.addEventListener("click",async()=>{if(!confirm(montanteHasActivity(m)?"Este montante possui dados. Excluir mesmo assim?":"Excluir este montante vazio?"))return;recordTombstone(v,"montantes",m.id);e.montantes=e.montantes.filter((x)=>x.id!==m.id);await saveVistoriaNow();if(prev)go("montante",v.id,e.id,prev.id);else go("estrutura",v.id,e.id);});menu.appendChild(del);}options.appendChild(menu);nav.appendChild(options);inner.appendChild(nav);
   const sticky=el("div",{class:"field-sticky no-print"});const nextBtn=el("button",{class:"field-next-btn"},e.visualFinalizada?"✓ VOLTAR À ESTRUTURA":(anom?"✓ SALVAR E IR PARA O PRÓXIMO":"✓ SEM ANOMALIAS → PRÓXIMO"));nextBtn.addEventListener("click",async()=>{if(e.visualFinalizada){await saveVistoriaNow();return go("estrutura",v.id,e.id);}if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();completeMontanteVisualAsInspected(m,e);let next=ord[idx+1];if(!next)next=addNextMontante(e);setResume(v,"visual",e,next);await saveVistoriaNow();go("montante",v.id,e.id,next.id);});sticky.appendChild(nextBtn);wrap.appendChild(sticky);return wrap;
 }
 function PrumoScreen() {
@@ -1471,9 +2605,9 @@ function PrumoScreen() {
   const hero=Card({class:"measure-hero"});hero.appendChild(el("div",{class:"measure-kicker"},`PRUMO · Estrutura ${e.codigo||"—"}`));hero.appendChild(el("div",{class:"measure-number"},"MONTANTE ",el("strong",{},String(m.numero).padStart(3,"0")),el("span",{},` de ${ord.length}`)));hero.appendChild(el("div",{class:"measure-progress"},el("div",{class:"progress-track"},el("div",{class:"progress-fill",style:`width:${ord.length?Math.round(prog.done/ord.length*100):0}%` })),el("span",{},`${prog.done}/${ord.length} concluídos${prog.noAccess?` · ${prog.noAccess} sem acesso`:""}`)));hero.appendChild(el("div",{class:"measure-status"},Tag(resolution.resolved?st:"pendente","sm"),el("span",{id:"save-indicator",class:"save-indicator"},"✓ salvo")));inner.appendChild(hero);
   const advance=async()=>{if(!prumoDone(m)){alert("Prumo incompleto. Registre Longitudinal e Transversal antes de avançar.");return;}const p=prumoProgress(e);if(next){setResume(v,"prumo",e,next);await saveVistoriaNow();return go("prumo",v.id,e.id,next.id);}e.prumoFinalizada=p.complete;const nextE=nextStageStructure(v,e,"prumo");if(nextE){const nm=(nextE.montantes||[]).find((x)=>!prumoDone(x))||(nextE.montantes||[])[0];setResume(v,"prumo",nextE,nm);await saveVistoriaNow();return go("prumo",v.id,nextE.id,nm&&nm.id);}delete v.resume;await saveVistoriaNow();go("vistoria",v.id);};
   if(!resolution.resolved){
-    if(!(item.ocorrencias||[]).length){const ok=el("button",{class:"measure-ok-btn"},"✓ L + T NA TOLERÂNCIA →");ok.addEventListener("click",async()=>{item.ocorrencias=[normalizeOccurrence({...newOcorrencia("ok"),descTxt:"COLUNA NA TOLERÂNCIA DO PRUMO",localTxt:"LONGITUDINAL / TRANSVERSAL",status:"ok"},item,"ok")];item.revisado=true;syncMontanteItemStatus(item);e.prumoFinalizada=false;await advance();});inner.appendChild(ok);}
+    if(!(item.ocorrencias||[]).length){const ok=el("button",{class:"measure-ok-btn"},"✓ L + T NA TOLERÂNCIA →");ok.addEventListener("click",async()=>{item.ocorrencias=[touchOccurrence(normalizeOccurrence({...newOcorrencia("ok"),descTxt:"COLUNA NA TOLERÂNCIA DO PRUMO",localTxt:"LONGITUDINAL / TRANSVERSAL",status:"ok"},item,"ok"))];item.revisado=true;syncMontanteItemStatus(item);touchItem(item);touchStage(e,"prumo");e.prumoFinalizada=false;await advance();});inner.appendChild(ok);}
     else inner.appendChild(el("div",{class:"draft-banner",style:"margin-top:10px"},`Resultado incompleto: ${!resolution.longitudinal?"falta Longitudinal":""}${!resolution.longitudinal&&!resolution.transversal?" e ":""}${!resolution.transversal?"falta Transversal":""}.`));
-    const alt=el("div",{class:"measure-alt-grid"});const det=el("button",{class:"quick-secondary-btn"},(item.ocorrencias||[]).length?"Completar / editar eixos":"Detalhar eixos / fora de prumo");det.addEventListener("click",()=>{state.itemDetailReturn="prumo";go("itemDetail",v.id,e.id,m.id,null,item.id);});const no=el("button",{class:"quick-secondary-btn"},"Sem acesso");no.addEventListener("click",async()=>{item.ocorrencias=[normalizeOccurrence({...newOcorrencia("naoaplica"),descTxt:"COLUNA SEM ACESSO",localTxt:"LONGITUDINAL / TRANSVERSAL",status:"naoaplica"},item,"naoaplica")];item.revisado=true;syncMontanteItemStatus(item);await advance();});alt.appendChild(det);alt.appendChild(no);inner.appendChild(alt);
+    const alt=el("div",{class:"measure-alt-grid"});const det=el("button",{class:"quick-secondary-btn"},(item.ocorrencias||[]).length?"Completar / editar eixos":"Detalhar eixos / fora de prumo");det.addEventListener("click",()=>{state.itemDetailReturn="prumo";go("itemDetail",v.id,e.id,m.id,null,item.id);});const no=el("button",{class:"quick-secondary-btn"},"Sem acesso");no.addEventListener("click",async()=>{item.ocorrencias=[touchOccurrence(normalizeOccurrence({...newOcorrencia("naoaplica"),descTxt:"COLUNA SEM ACESSO",localTxt:"LONGITUDINAL / TRANSVERSAL",status:"naoaplica"},item,"naoaplica"))];item.revisado=true;syncMontanteItemStatus(item);touchItem(item);touchStage(e,"prumo");await advance();});alt.appendChild(det);alt.appendChild(no);inner.appendChild(alt);
   } else {
     const result=Card({class:"measure-result",style:"margin-top:10px"});result.appendChild(el("div",{class:"measure-result-title"},resolution.noAccess?"Resultado: sem acesso":"Resultado registrado"));(item.ocorrencias||[]).forEach((oc)=>result.appendChild(el("div",{class:"measure-result-line"},el("strong",{},oc.localTxt||"Resultado"),el("span",{},oc.descTxt||"—"))));const edit=el("button",{class:"ghost-btn touch-btn",style:"width:100%;margin-top:8px"},"Editar resultado");edit.addEventListener("click",()=>{state.itemDetailReturn="prumo";e.prumoFinalizada=false;go("itemDetail",v.id,e.id,m.id,null,item.id);});result.appendChild(edit);inner.appendChild(result);
   }
@@ -1486,12 +2620,14 @@ function LuxScreen() {
   const item=iluminacaoItem(e);if(!item){inner.appendChild(el("div",{class:"empty"},"Item 9.45 de iluminação não encontrado no catálogo."));return wrap;}item.ocorrencias=item.ocorrencias||[];setResume(v,"lux",e);
   const prog=luxProgress(e);const hero=Card({class:"measure-hero lux-hero"});hero.appendChild(el("div",{class:"measure-kicker"},`ILUMINAÇÃO · Estrutura ${e.codigo||"—"}`));hero.appendChild(el("div",{class:"lux-main"},el("strong",{},String(prog.measurements)),el("span",{},prog.measurements===1?"aferição válida":"aferições válidas")));hero.appendChild(el("div",{class:"lux-limit"},`Limite configurado: ≥ ${item.min} ${item.unidade}`));hero.appendChild(el("div",{class:"measure-status"},prog.problems?Tag("problema","sm",`${prog.problems} abaixo`):prog.complete?Tag("ok","sm","Concluída"):Tag("pendente","sm","Em andamento"),el("span",{id:"save-indicator",class:"save-indicator"},"✓ salvo")));inner.appendChild(hero);
   const list=el("div",{class:"lux-list"});
-  const renderLuxCard=(oc,idx)=>{normalizeOccurrence(oc,item,"pendente");const c=Card({class:"lux-measure-card"});c.appendChild(el("div",{class:"occurrence-head"},el("div",{},el("div",{style:"font-weight:700"},`Aferição ${idx+1}`),Tag(Boolean(String(oc.montanteRef||"").trim())?ocorrenciaStatus(oc,item):"pendente","sm")),(()=>{const b=el("button",{class:"icon-btn",html:svg("trash",15)});b.addEventListener("click",async()=>{if(confirm("Remover esta aferição?")){item.ocorrencias.splice(idx,1);e.luxFinalizada=false;await saveVistoriaNow();render();}});return b;})()));
-    const montanteRefs=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero).map((m)=>`Montante ${m.numero}`);const refField=choiceOrCustomField("Montante / posição de referência",oc.montanteRef||"",montanteRefs,(val)=>{oc.montanteRef=val;e.luxFinalizada=false;saveVistoriaDebounced();},"Ex: Centro do corredor");refField.classList.add("lux-ref-field");c.appendChild(refField);
-    const inp=inputEl(oc.valor||"",(val)=>{oc.valor=val;oc.status=statusFromMedicao(val,item.min);e.luxFinalizada=false;saveVistoriaDebounced();},`Mínimo ${item.min}`,"number"); inp.classList.add("lux-value-input");c.appendChild(Field(`Valor medido (${item.unidade})`,inp));const st=statusFromMedicao(oc.valor,item.min);const hasRef=Boolean(String(oc.montanteRef||"").trim());c.appendChild(el("div",{class:"measurement-hint"},!hasRef?"Selecione primeiro o montante / posição de referência.":!oc.valor?`Digite o valor medido · mínimo ${item.min} ${item.unidade}`:st==="ok"?`✓ Dentro do limite (≥ ${item.min} ${item.unidade})`:`⚠ Abaixo do limite (${item.min} ${item.unidade})`));return c;};
+  const renderLuxCard=(oc,idx)=>{normalizeOccurrence(oc,item,"pendente");const c=Card({class:"lux-measure-card"});c.appendChild(el("div",{class:"occurrence-head"},el("div",{},el("div",{style:"font-weight:700"},`Aferição ${idx+1}`),Tag(Boolean(String(oc.montanteRef||"").trim())?ocorrenciaStatus(oc,item):"pendente","sm")),(()=>{const b=el("button",{class:"icon-btn",html:svg("trash",15)});b.addEventListener("click",async()=>{if(confirm("Remover esta aferição?")){recordTombstone(v,"ocorrencias",oc.id);item.ocorrencias.splice(idx,1);e.luxFinalizada=false;touchStage(e,"lux");await saveVistoriaNow();render();}});return b;})()));
+    const montanteRefs=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero).map((m)=>`Montante ${m.numero}`);const refField=choiceOrCustomField("Montante / posição de referência",oc.montanteRef||"",montanteRefs,(val)=>{oc.montanteRef=val;e.luxFinalizada=false;touchOccurrenceFull(oc,item,e);saveVistoriaDebounced();},"Ex: Centro do corredor");refField.classList.add("lux-ref-field");c.appendChild(refField);
+    const inp=inputEl(oc.valor||"",(val)=>{oc.valor=val;oc.status=statusFromMedicao(val,item.min);e.luxFinalizada=false;touchOccurrenceFull(oc,item,e);saveVistoriaDebounced();},`Mínimo ${item.min}`,"number"); inp.classList.add("lux-value-input");c.appendChild(Field(`Valor medido (${item.unidade})`,inp));const st=statusFromMedicao(oc.valor,item.min);const hasRef=Boolean(String(oc.montanteRef||"").trim());c.appendChild(el("div",{class:"measurement-hint"},!hasRef?"Selecione primeiro o montante / posição de referência.":!oc.valor?`Digite o valor medido · mínimo ${item.min} ${item.unidade}`:st==="ok"?`✓ Dentro do limite (≥ ${item.min} ${item.unidade})`:`⚠ Abaixo do limite (${item.min} ${item.unidade})`));
+    const photoWrap=el("div",{style:"margin-top:6px"}); renderPhotoArea(photoWrap,oc,()=>touchOccurrenceFull(oc,item,e)); c.appendChild(photoWrap);
+    return c;};
   item.ocorrencias.forEach((oc,idx)=>list.appendChild(renderLuxCard(oc,idx)));if(!item.ocorrencias.length)list.appendChild(el("div",{class:"card empty"},"Nenhuma aferição ainda. Registre os pontos definidos pelo técnico para esta estrutura."));inner.appendChild(list);
-  const add=el("button",{class:"measure-add-btn"},"＋ Adicionar aferição");add.addEventListener("click",async()=>{item.ocorrencias.push(newOcorrencia("pendente"));e.luxFinalizada=false;await saveVistoriaNow();render();setTimeout(()=>{const cards=[...document.querySelectorAll(".lux-measure-card")];const last=cards[cards.length-1];const select=last&&last.querySelector(".lux-ref-field select");if(select)select.focus();},120);});inner.appendChild(add);
-  const finish=el("button",{class:"field-next-btn",style:"margin-top:12px"},e.luxFinalizada?"✓ ETAPA LUX CONCLUÍDA — CONTINUAR":"✓ FINALIZAR LUX DESTA ESTRUTURA");finish.addEventListener("click",async()=>{const p=luxProgress(e);if(!e.luxFinalizada){if(!item.ocorrencias.length)return alert("Registre pelo menos uma aferição antes de finalizar a etapa de Lux.");const noRef=item.ocorrencias.filter((oc)=>!String(oc.montanteRef||"").trim()).length;if(noRef)return alert(`Há ${noRef} aferição(ões) sem montante / posição de referência.`);if(p.pending)return alert(`Há ${p.pending} aferição(ões) sem valor válido.`);e.luxFinalizada=true;e.luxFinalizadaAt=new Date().toISOString();}const nextE=nextStageStructure(v,e,"lux");if(nextE){setResume(v,"lux",nextE);await saveVistoriaNow();return go("lux",v.id,nextE.id);}delete v.resume;await saveVistoriaNow();go("vistoria",v.id);});inner.appendChild(finish);return wrap;
+  const add=el("button",{class:"measure-add-btn"},"＋ Adicionar aferição");add.addEventListener("click",async()=>{item.ocorrencias.push(touchOccurrence(newOcorrencia("pendente")));e.luxFinalizada=false;touchStage(e,"lux");await saveVistoriaNow();render();setTimeout(()=>{const cards=[...document.querySelectorAll(".lux-measure-card")];const last=cards[cards.length-1];const select=last&&last.querySelector(".lux-ref-field select");if(select)select.focus();},120);});inner.appendChild(add);
+  const finish=el("button",{class:"field-next-btn",style:"margin-top:12px"},e.luxFinalizada?"✓ ETAPA LUX CONCLUÍDA — CONTINUAR":"✓ FINALIZAR LUX DESTA ESTRUTURA");finish.addEventListener("click",async()=>{const p=luxProgress(e);if(!e.luxFinalizada){if(!item.ocorrencias.length)return alert("Registre pelo menos uma aferição antes de finalizar a etapa de Lux.");const noRef=item.ocorrencias.filter((oc)=>!String(oc.montanteRef||"").trim()).length;if(noRef)return alert(`Há ${noRef} aferição(ões) sem montante / posição de referência.`);if(p.pending)return alert(`Há ${p.pending} aferição(ões) sem valor válido.`);e.luxFinalizada=true;e.luxFinalizadaAt=new Date().toISOString();touchStage(e,"lux");}const nextE=nextStageStructure(v,e,"lux");if(nextE){setResume(v,"lux",nextE);await saveVistoriaNow();return go("lux",v.id,nextE.id);}delete v.resume;await saveVistoriaNow();go("vistoria",v.id);});inner.appendChild(finish);return wrap;
 }
 
 function statusSelect(item) {
@@ -1517,30 +2653,30 @@ function ItemDetailScreen() {
   normalizeMontanteItem(item);
   wrap.appendChild(el("div",{class:"field-context"},`Estrutura ${e.codigo||"—"} · Montante ${m.numero}`)); wrap.appendChild(el("div",{class:"item-title-large"},CodeBadge(item.codigo),item.nome)); wrap.appendChild(el("div",{style:"display:flex;align-items:center;justify-content:space-between;margin:8px 0 14px"},Tag(montanteItemStatus(item)),el("span",{id:"save-indicator",class:"save-indicator"},"✓ Salvo")));
   if(item.id!=="prumo"){
-    if(!(item.ocorrencias||[]).length){const actions=el("div",{class:"item-action-grid"});const ok=el("button",{class:"field-ok-btn"},"✓ Conforme");ok.addEventListener("click",async()=>{item.revisado=true;item.status="ok";await saveVistoriaNow();render();});const na=el("button",{class:"quick-secondary-btn"},"N/A");na.addEventListener("click",async()=>{item.revisado=true;item.status="naoaplica";await saveVistoriaNow();render();});actions.appendChild(ok);actions.appendChild(na);wrap.appendChild(actions);}
+    if(!(item.ocorrencias||[]).length){const actions=el("div",{class:"item-action-grid"});const ok=el("button",{class:"field-ok-btn"},"✓ Conforme");ok.addEventListener("click",async()=>{item.revisado=true;item.status="ok";touchItem(item);touchStage(e,"visual");await saveVistoriaNow();render();});const na=el("button",{class:"quick-secondary-btn"},"N/A");na.addEventListener("click",async()=>{item.revisado=true;item.status="naoaplica";touchItem(item);touchStage(e,"visual");await saveVistoriaNow();render();});actions.appendChild(ok);actions.appendChild(na);wrap.appendChild(actions);}
     else wrap.appendChild(el("div",{class:"draft-banner"},`Este item possui ${(item.ocorrencias||[]).length} ocorrência(s). Para marcá-lo Conforme/N/A, remova explicitamente as ocorrências primeiro.`));
   } else {
     const r=prumoResolution(m); if(!r.resolved && (item.ocorrencias||[]).length) wrap.appendChild(el("div",{class:"draft-banner"},`Prumo incompleto: ${!r.longitudinal?"falta Longitudinal":""}${!r.longitudinal&&!r.transversal?" e ":""}${!r.transversal?"falta Transversal":""}.`));
-    const q=el("button",{class:"field-ok-btn",style:"width:100%;margin:10px 0"},"✓ Longitudinal + Transversal na tolerância");q.addEventListener("click",async()=>{if((item.ocorrencias||[]).length&&!confirm("Substituir os resultados atuais por L + T na tolerância?"))return;item.ocorrencias=[normalizeOccurrence({...newOcorrencia("ok"),descTxt:"COLUNA NA TOLERÂNCIA DO PRUMO",localTxt:"LONGITUDINAL / TRANSVERSAL",status:"ok"},item,"ok")];item.revisado=true;syncMontanteItemStatus(item);await saveVistoriaNow();render();});wrap.appendChild(q);
+    const q=el("button",{class:"field-ok-btn",style:"width:100%;margin:10px 0"},"✓ Longitudinal + Transversal na tolerância");q.addEventListener("click",async()=>{if((item.ocorrencias||[]).length&&!confirm("Substituir os resultados atuais por L + T na tolerância?"))return;item.ocorrencias=[touchOccurrence(normalizeOccurrence({...newOcorrencia("ok"),descTxt:"COLUNA NA TOLERÂNCIA DO PRUMO",localTxt:"LONGITUDINAL / TRANSVERSAL",status:"ok"},item,"ok"))];item.revisado=true;syncMontanteItemStatus(item);touchItem(item);touchStage(e,"prumo");await saveVistoriaNow();render();});wrap.appendChild(q);
   }
-  const list=el("div",{style:"display:flex;flex-direction:column;gap:10px;margin-top:10px"}); (item.ocorrencias||[]).forEach((oc,idx)=>list.appendChild(MontanteOcorrenciaCard(oc,idx,item))); wrap.appendChild(list);
+  const list=el("div",{style:"display:flex;flex-direction:column;gap:10px;margin-top:10px"}); (item.ocorrencias||[]).forEach((oc,idx)=>list.appendChild(MontanteOcorrenciaCard(oc,idx,item,e))); wrap.appendChild(list);
   const add=el("button",{class:"quick-anomaly-btn",style:"width:100%;margin-top:12px"},el("span",{html:svg("plus",18)}),item.id==="prumo"?"Adicionar resultado / eixo":"Adicionar outra ocorrência");
-  add.addEventListener("click",async()=>{if(item.id!=="prumo")return startNewAnomaly(v,e,m,item);item.ocorrencias=item.ocorrencias||[];item.ocorrencias.push(newOcorrencia("pendente"));item.status="pendente";e.prumoFinalizada=false;await saveVistoriaNow();render();});wrap.appendChild(add);
+  add.addEventListener("click",async()=>{if(item.id!=="prumo")return startNewAnomaly(v,e,m,item);const novaOc=touchOccurrence(newOcorrencia("pendente"));item.ocorrencias=item.ocorrencias||[];item.ocorrencias.push(novaOc);item.status="pendente";touchItem(item);touchStage(e,"prumo");e.prumoFinalizada=false;await saveVistoriaNow();render();});wrap.appendChild(add);
   wrap.appendChild(el("div",{class:"field-mode-hint",style:"margin-top:8px"},item.id==="prumo"?"Para concluir o montante, registre os dois eixos (Longitudinal e Transversal), ou use L + T na tolerância.":"O mesmo código pode ter vários registros no mesmo montante. Cada registro pode ter até 4 fotos."));
   const returnToPrumo=state.itemDetailReturn==="prumo"; const back=el("button",{class:"submit-btn",style:"width:100%;margin-top:16px"},returnToPrumo?"Voltar para o modo Prumo":"Voltar para o montante"); back.addEventListener("click",async()=>{if(item.id==="prumo"){item.ocorrencias=(item.ocorrencias||[]).filter((oc)=>occurrenceHasMeaningfulData(oc));syncMontanteItemStatus(item);e.prumoFinalizada=prumoProgress(e).complete;}await saveVistoriaNow();go(returnToPrumo?"prumo":"montante",v.id,e.id,m.id);});wrap.appendChild(back);return wrap;
 }
-function MontanteOcorrenciaCard(oc,idx,item){
+function MontanteOcorrenciaCard(oc,idx,item,e){
   normalizeOccurrence(oc,item,item.id==="prumo"?"pendente":"problema");
   const card=Card({class:"occurrence-card",style:"padding:12px"}); const st=ocorrenciaStatus(oc,item);
-  card.appendChild(el("div",{class:"occurrence-head"},el("div",{},el("div",{style:"font-weight:700"},item.id==="prumo"?`Resultado ${idx+1}`:`Ocorrência ${idx+1}`),Tag(st,"sm")),(()=>{const b=el("button",{class:"icon-btn",html:svg("trash",15)});b.addEventListener("click",async()=>{if(confirm("Remover este registro?")){item.ocorrencias.splice(idx,1);syncMontanteItemStatus(item);await saveVistoriaNow();render();}});return b;})()));
-  if(item.descOpcoes)card.appendChild(Field("Descrição / resultado",suggestInput(oc.descTxt,(val)=>{oc.descTxt=val;oc.status=ocorrenciaStatus(oc,item);syncMontanteItemStatus(item);saveVistoriaDebounced();},"Selecione ou digite",item.descOpcoes)));
-  if(item.tipoOpcoes)card.appendChild(Field("Tipo / componente",suggestInput(oc.tipoTxt,(val)=>{oc.tipoTxt=val;saveVistoriaDebounced();},"Tipo",item.tipoOpcoes)));
-  card.appendChild(Field("Nível",inputEl(oc.corte||"",(val)=>{oc.corte=val;saveVistoriaDebounced();},"Ex: 1, 3, 18")));
-  if(item.localOpcoes)card.appendChild(Field(item.localLabel||"Localização",suggestInput(oc.localTxt,(val)=>{oc.localTxt=val;oc.status=ocorrenciaStatus(oc,item);syncMontanteItemStatus(item);saveVistoriaDebounced();},"Localização",item.localOpcoes)));
-  if(item.id!=="prumo")card.appendChild(Field("Grau",suggestInput(oc.grauTxt,(val)=>{oc.grauTxt=val;saveVistoriaDebounced();},"Leve, Médio, Grave, Gravíssimo",GRAU_OPCOES)));
-  const obs=el("textarea",{class:"input",rows:2,placeholder:"Observação (opcional)"});obs.value=oc.obs||"";obs.addEventListener("input",(ev)=>{oc.obs=ev.target.value;saveVistoriaDebounced();});card.appendChild(el("div",{class:"field"},el("label",{},"Observações"),obs));
-  card.appendChild(Field("Quantidade",inputEl(oc.qtd==null?1:oc.qtd,(val)=>{oc.qtd=val;saveVistoriaDebounced();},"1","number")));
-  const photos=el("div",{});renderPhotoArea(photos,oc);card.appendChild(photos);return card;
+  card.appendChild(el("div",{class:"occurrence-head"},el("div",{},el("div",{style:"font-weight:700"},item.id==="prumo"?`Resultado ${idx+1}`:`Ocorrência ${idx+1}`),Tag(st,"sm")),(()=>{const b=el("button",{class:"icon-btn",html:svg("trash",15)});b.addEventListener("click",async()=>{if(confirm("Remover este registro?")){recordTombstone(state.draftVistoria,"ocorrencias",oc.id);item.ocorrencias.splice(idx,1);syncMontanteItemStatus(item);touchItem(item);touchStage(e,stageForItem(item));await saveVistoriaNow();render();}});return b;})()));
+  if(item.descOpcoes)card.appendChild(Field("Descrição / resultado",suggestInput(oc.descTxt,(val)=>{oc.descTxt=val;oc.status=ocorrenciaStatus(oc,item);syncMontanteItemStatus(item);touchOccurrenceFull(oc,item,e);saveVistoriaDebounced();},"Selecione ou digite",item.descOpcoes)));
+  if(item.tipoOpcoes)card.appendChild(Field("Tipo / componente",suggestInput(oc.tipoTxt,(val)=>{oc.tipoTxt=val;touchOccurrenceFull(oc,item,e);saveVistoriaDebounced();},"Tipo",item.tipoOpcoes)));
+  card.appendChild(Field("Nível",inputEl(oc.corte||"",(val)=>{oc.corte=val;touchOccurrenceFull(oc,item,e);saveVistoriaDebounced();},"Ex: 1, 3, 18")));
+  if(item.localOpcoes)card.appendChild(Field(item.localLabel||"Localização",suggestInput(oc.localTxt,(val)=>{oc.localTxt=val;oc.status=ocorrenciaStatus(oc,item);syncMontanteItemStatus(item);touchOccurrenceFull(oc,item,e);saveVistoriaDebounced();},"Localização",item.localOpcoes)));
+  if(item.id!=="prumo")card.appendChild(Field("Grau",suggestInput(oc.grauTxt,(val)=>{oc.grauTxt=val;touchOccurrenceFull(oc,item,e);saveVistoriaDebounced();},"Leve, Médio, Grave, Gravíssimo",GRAU_OPCOES)));
+  const obs=el("textarea",{class:"input",rows:2,placeholder:"Observação (opcional)"});obs.value=oc.obs||"";obs.addEventListener("input",(ev)=>{oc.obs=ev.target.value;touchOccurrenceFull(oc,item,e);saveVistoriaDebounced();});card.appendChild(el("div",{class:"field"},el("label",{},"Observações"),obs));
+  card.appendChild(Field("Quantidade",inputEl(oc.qtd==null?1:oc.qtd,(val)=>{oc.qtd=val;touchOccurrenceFull(oc,item,e);saveVistoriaDebounced();},"1","number")));
+  const photos=el("div",{});renderPhotoArea(photos,oc,()=>touchOccurrenceFull(oc,item,e));card.appendChild(photos);return card;
 }
 
 function ChipMultiSelect(label, options, selectedArr, onChange) {
@@ -1562,13 +2698,89 @@ function ChipMultiSelect(label, options, selectedArr, onChange) {
   wrap.appendChild(chipWrap);
   return wrap;
 }
-function renderPhotoArea(container, item) {
+function renderPhotoArea(container, item, onTouch) {
   container.innerHTML = "";
-  item.fotos = occurrencePhotos(item);
-  const label=el("div",{class:"photo-label"},`Fotos (${item.fotos.length}/4)`,el("span",{},"até 1200 px · JPEG 72%"));container.appendChild(label);
-  const grid=el("div",{class:"photo-grid"});
-  item.fotos.forEach((src,idx)=>{const wrap=el("div",{class:"photo-wrap"},el("img",{class:"photo-thumb",src}),el("button",{class:"photo-remove",html:svg("x",12)}));wrap.querySelector(".photo-remove").addEventListener("click",async()=>{item.fotos.splice(idx,1);await saveVistoriaNow();renderPhotoArea(container,item);});grid.appendChild(wrap);});
-  if(item.fotos.length<4){const btn=el("button",{class:"photo-add-btn photo-tile"},el("span",{html:svg("camera",20)}),item.fotos.length?"Outra foto":"Anexar foto");const input=el("input",{type:"file",accept:"image/*",capture:"environment",style:"display:none"});input.addEventListener("change",async(ev)=>{const file=ev.target.files&&ev.target.files[0];if(!file)return;try{const b64=await resizeImage(file);item.fotos=occurrencePhotos(item);if(item.fotos.length<4)item.fotos.push(b64);await saveVistoriaNow();renderPhotoArea(container,item);}catch(err){alert("Não foi possível processar a foto.");}});btn.addEventListener("click",()=>input.click());grid.appendChild(btn);grid.appendChild(input);}
+  item.fotos = occurrencePhotoRefs(item);
+  const label = el("div", { class: "photo-label" }, `Fotos (${item.fotos.length})`, el("span", {}, "até 1200 px · JPEG 72%"));
+  container.appendChild(label);
+  const grid = el("div", { class: "photo-grid" });
+
+  item.fotos.forEach((photoId, idx) => {
+    const wrap = el("div", { class: "photo-wrap" });
+    const img = el("img", { class: "photo-thumb", alt: "Evidência" });
+    const btnRemove = el("button", { class: "photo-remove", html: svg("x", 12) });
+
+    PhotoUrlManager.resolveThumbUrl(photoId).then((url) => {
+      if (url) img.src = url;
+    });
+
+    btnRemove.addEventListener("click", async () => {
+      const removedId = item.fotos[idx];
+      item.fotos.splice(idx, 1);
+      if (state.draftVistoria && removedId) {
+        recordTombstone(state.draftVistoria, "photos", removedId);
+      }
+      if (onTouch) onTouch();
+      await saveVistoriaNow();
+      renderPhotoArea(container, item, onTouch);
+    });
+
+    wrap.appendChild(img);
+    wrap.appendChild(btnRemove);
+    grid.appendChild(wrap);
+  });
+
+  if (item.fotos.length < 4) {
+    const btn = el("button", { class: "photo-add-btn photo-tile" }, el("span", { html: svg("camera", 20) }), item.fotos.length ? "Outra foto" : "Anexar foto");
+    const input = el("input", { type: "file", accept: "image/*", capture: "environment", style: "display:none" });
+    input.addEventListener("change", async (ev) => {
+      const file = ev.target.files && ev.target.files[0];
+      if (!file) return;
+      try {
+        const { blob, width, height, size, mimeType } = await resizeImageToBlob(file);
+        const photoId = "pho_" + uid();
+        const vistoriaId = (state.draftVistoria && state.draftVistoria.id) || state.activeVistoriaId || "temp";
+        const occurrenceId = item.id || uid();
+        const record = {
+          id: photoId,
+          vistoriaId,
+          occurrenceId,
+          blob,
+          mimeType,
+          width,
+          height,
+          size,
+          createdAt: nowIso(),
+          deviceOrigin: getDeviceId(),
+          updatedAt: nowIso(),
+          deletedAt: null
+        };
+        PhotoUrlManager.registerBlob(photoId, blob);
+        item.fotos = occurrencePhotoRefs(item);
+        item.fotos.push(photoId);
+        if (onTouch) onTouch();
+        if (state.draftVistoria) {
+          syncVistoriaListEntry(state.draftVistoria);
+          const items = [
+            { store: "photos", key: undefined, value: record },
+            { store: "vistorias", key: undefined, value: compactVistoriaForStorage(state.draftVistoria) }
+          ];
+          await idbTransactionApply(items);
+          await persistVistoriaList();
+          updateSaveIndicator();
+        } else {
+          await idbSet("photos", photoId, record);
+        }
+        renderPhotoArea(container, item, onTouch);
+      } catch (err) {
+        console.error(err);
+        alert("Não foi possível processar a foto.");
+      }
+    });
+    btn.addEventListener("click", () => input.click());
+    grid.appendChild(btn);
+    grid.appendChild(input);
+  }
   container.appendChild(grid);
 }
 /* ---------------- Histórico ---------------- */
@@ -1635,6 +2847,16 @@ function imageUrlToDataUrl(url) {
     reader.readAsDataURL(blob);
   }));
 }
+async function loadPhotoDataUrl(photoId, contextText = "") {
+  if (!photoId) return null;
+  if (typeof photoId === "string" && photoId.startsWith("data:image")) return photoId;
+  const record = await idbGet("photos", photoId);
+  if (!record || !record.blob) return null;
+  const createdFormatted = record.createdAt ? fmtDate(record.createdAt) : "";
+  const line1 = [state.config.empresa, contextText].filter(Boolean).join(" · ");
+  const line2 = createdFormatted;
+  return renderWatermarkedDataUrl(record.blob, line1, line2);
+}
 async function buildInspectionPdf(v) {
   const jsPDF = await loadJsPdf();
   const doc = new jsPDF({ unit: "pt", format: "a4" });
@@ -1667,7 +2889,7 @@ async function buildInspectionPdf(v) {
   text(v.lojaCd || "Inspeção", 18, { bold: true, gap: 2 });
   text([v.local, (v.estruturas || []).length + " estrutura(s)", "Inspetor(es): " + (v.inspetor || "—"), fmtDateOnly(v.data)].filter(Boolean).join("  ·  "), 10, { color: "#5B6470", gap: 16 });
 
-  (v.estruturas || []).forEach((e) => {
+  for (const e of (v.estruturas || [])) {
     ensureSpace(30);
     text(`Estrutura ${e.codigo || "—"}`, 13, { bold: true, gap: 2 });
     const sub = [e.setor, e.tipoEstrutura, e.rua && "Rua " + e.rua, e.lado && "Lado " + e.lado, e.fabricante].filter(Boolean).join("  ·  ");
@@ -1684,7 +2906,7 @@ async function buildInspectionPdf(v) {
     for (const { it, oc } of estMedicoes) {
       text(`${it.codigo ? "[" + it.codigo + "] " : ""}${it.nome} — ${oc.montanteRef || "Estrutura"}: ${oc.valor} ${it.unidade}`, 9.5, { color: "#476B55", gap: 4 });
     }
-    if (!problemEntries.length && !estOcorrencias.length) return;
+    if (!problemEntries.length && !estOcorrencias.length) continue;
 
     for (const { it, oc } of estOcorrencias) {
       ensureSpace(50);
@@ -1692,8 +2914,15 @@ async function buildInspectionPdf(v) {
       const detailsEst = [oc.descTxt && "Descrição: " + oc.descTxt, oc.tipoTxt && "Tipo: " + oc.tipoTxt, oc.localTxt && "Localização: " + oc.localTxt, oc.grauTxt && "Grau: " + oc.grauTxt, it.tipo === "medicao" && oc.valor && "Medição: " + oc.valor + " " + it.unidade, oc.qtd && "Qtd: " + oc.qtd].filter(Boolean).join("  ·  ");
       if (detailsEst) text(detailsEst, 9, { color: "#5B6470", gap: 2 });
       if (oc.obs) text("Obs: " + oc.obs, 9, { color: "#5B6470", gap: 4 });
-      for (const foto of occurrencePhotos(oc)) {
-        try { ensureSpace(110); doc.addImage(foto, "JPEG", marginX, y, 100, 100); y += 108; } catch (err) { /* ignora foto que falhar */ }
+      for (const photoId of occurrencePhotoRefs(oc)) {
+        try {
+          const foto = await loadPhotoDataUrl(photoId, `${e.codigo || "EST"} · ESTRUTURA`);
+          if (foto) {
+            ensureSpace(110);
+            doc.addImage(foto, "JPEG", marginX, y, 100, 100);
+            y += 108;
+          }
+        } catch (err) { /* ignora foto que falhar */ }
       }
       y += 6;
     }
@@ -1705,12 +2934,19 @@ async function buildInspectionPdf(v) {
       if (details) text(details, 9, { color: "#5B6470", gap: 2 });
       if (m.observacoes) text("Obs. montante: " + m.observacoes, 9, { color: "#5B6470", gap: 2 });
       if (i.obs) text("Obs. ocorrência: " + i.obs, 9, { color: "#5B6470", gap: 4 });
-      for (const foto of occurrencePhotos(i)) {
-        try { ensureSpace(110); doc.addImage(foto, "JPEG", marginX, y, 100, 100); y += 108; } catch (err) { /* ignora foto que falhar */ }
+      for (const photoId of occurrencePhotoRefs(i)) {
+        try {
+          const foto = await loadPhotoDataUrl(photoId, `${e.codigo || "EST"} · M${m.numero}`);
+          if (foto) {
+            ensureSpace(110);
+            doc.addImage(foto, "JPEG", marginX, y, 100, 100);
+            y += 108;
+          }
+        } catch (err) { /* ignora foto que falhar */ }
       }
       y += 6;
     }
-  });
+  }
 
   const partsRows = buildPartsForVistoria(v);
   if (partsRows.length) {
@@ -1820,7 +3056,39 @@ function ReportScreen() {
   topActions.appendChild(btnAnomalias);
   const row1 = el("div", { class: "row" });
   const btnPdf = el("button", { class: "action-btn", style: "background:var(--ink);color:#fff" }, el("span", { html: svg("download", 16) }), " Baixar / PDF");
-  btnPdf.addEventListener("click", () => window.print());
+  btnPdf.addEventListener("click", async () => {
+    btnPdf.disabled = true;
+    const oldHtml = btnPdf.innerHTML;
+    btnPdf.innerHTML = "Preparando laudo em alta resolução…";
+    try {
+      const reportImgs = Array.from(printable.querySelectorAll("img[data-photo-id]"));
+      await Promise.all(reportImgs.map(async (img) => {
+        const photoId = img.dataset.photoId;
+        const context = img.dataset.context || "";
+        if (photoId) {
+          const highResUrl = await loadPhotoDataUrl(photoId, context);
+          if (highResUrl) {
+            img.src = highResUrl;
+            if (img.decode) await img.decode().catch(() => {});
+          }
+        }
+      }));
+      const allImgs = Array.from(printable.querySelectorAll("img"));
+      await Promise.all(allImgs.map((img) => {
+        if (img.complete) return img.decode ? img.decode().catch(() => {}) : Promise.resolve();
+        return new Promise((res) => {
+          img.onload = () => (img.decode ? img.decode().catch(() => {}).then(res) : res());
+          img.onerror = res;
+        });
+      }));
+    } catch (e) {
+      console.warn("Aviso ao preparar fotos para impressão:", e);
+    } finally {
+      btnPdf.disabled = false;
+      btnPdf.innerHTML = oldHtml;
+    }
+    window.print();
+  });
   const btnShare = el("button", { class: "action-btn", style: "background:#fff;color:var(--ink);border:1px solid var(--line)" }, el("span", { html: svg("share", 16) }), " Compartilhar");
   btnShare.addEventListener("click", () => shareReport(v, st));
   row1.appendChild(btnPdf); row1.appendChild(btnShare);
@@ -1852,7 +3120,20 @@ function ReportScreen() {
         if (detalhes) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, detalhes));
         if (it.tipo === "medicao" && oc.valor) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, `Medição: ${oc.valor} ${it.unidade}`));
         if (oc.obs) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, oc.obs));
-        occurrencePhotos(oc).forEach((foto) => c.appendChild(el("img", { src: foto, style: "margin:8px 6px 0 0;width:110px;height:110px;object-fit:cover;border-radius:6px" })));
+        const photoGrid = el("div", { style: "display:flex;flex-wrap:wrap;gap:6px;margin-top:8px" });
+        c.appendChild(photoGrid);
+        occurrencePhotoRefs(oc).forEach((photoId) => {
+          const img = el("img", { style: "width:110px;height:110px;object-fit:cover;border-radius:6px" });
+          img.dataset.photoId = photoId;
+          img.dataset.context = `${e.codigo || "EST"} · ESTRUTURA`;
+          PhotoUrlManager.resolveThumbUrl(photoId).then((url) => {
+            if (url) {
+              img.src = url;
+              if (img.decode) img.decode().catch(() => {});
+            }
+          });
+          photoGrid.appendChild(img);
+        });
         itemsList.appendChild(c);
       });
       problemEntries.forEach(({ m, i }) => {
@@ -1866,7 +3147,20 @@ function ReportScreen() {
         if (i.valor) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, `Medição: ${i.valor} ${i.unidade}`));
         if (m.observacoes) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, "Obs. montante: " + m.observacoes));
         if (i.obs) c.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-top:5px" }, "Obs. ocorrência: " + i.obs));
-        occurrencePhotos(i).forEach((foto) => c.appendChild(el("img", { src: foto, style: "margin:8px 6px 0 0;width:110px;height:110px;object-fit:cover;border-radius:6px" })));
+        const photoGridM = el("div", { style: "display:flex;flex-wrap:wrap;gap:6px;margin-top:8px" });
+        c.appendChild(photoGridM);
+        occurrencePhotoRefs(i).forEach((photoId) => {
+          const img = el("img", { style: "width:110px;height:110px;object-fit:cover;border-radius:6px" });
+          img.dataset.photoId = photoId;
+          img.dataset.context = `${e.codigo || "EST"} · M${m.numero}`;
+          PhotoUrlManager.resolveThumbUrl(photoId).then((url) => {
+            if (url) {
+              img.src = url;
+              if (img.decode) img.decode().catch(() => {});
+            }
+          });
+          photoGridM.appendChild(img);
+        });
         itemsList.appendChild(c);
       });
       printable.appendChild(itemsList);
@@ -1892,14 +3186,14 @@ function ReportScreen() {
 
     const resolveBtn = el("button", { class: "action-btn no-print", style: (e.resolvido ? "background:#fff;color:var(--ink-soft);border:1px solid var(--line)" : "background:var(--green-bg);color:var(--green-dark);border:1px solid var(--line)") + ";margin-bottom:18px" },
       el("span", { html: svg("check", 14) }), " " + (e.resolvido ? "Reabrir pendência desta estrutura" : "Marcar peças desta estrutura como resolvidas"));
-    resolveBtn.addEventListener("click", async () => { e.resolvido = !e.resolvido; await saveVistoriaObject(v); render(); });
+    resolveBtn.addEventListener("click", async () => { e.resolvido = !e.resolvido; touchResolvido(e); await saveVistoriaObject(v); render(); });
     printable.appendChild(resolveBtn);
   });
   wrap.appendChild(printable);
 
   const actions = el("div", { class: "no-print", style: "padding:0 16px 20px;display:flex;flex-direction:column;gap:8px" });
   const btnDelete = el("button", { class: "action-btn", style: "background:#fff;color:var(--red-dark);border:1px solid var(--red-bg)" }, el("span", { html: svg("trash", 15) }), " Excluir inspeção inteira");
-  btnDelete.addEventListener("click", async () => { if (confirm("Excluir esta inspeção e todas as estruturas dela?")) { await idbDelete("vistorias", v.id); await persistVistoriaList(); go("history"); } });
+  btnDelete.addEventListener("click", async () => { if (confirm("Excluir esta inspeção e todas as estruturas dela?")) { await deleteVistoriaCompletamente(v.id); go("history"); } });
   actions.appendChild(btnDelete);
 
   wrap.appendChild(actions);
@@ -2466,35 +3760,358 @@ function ConfigScreen() {
   wrap.appendChild(itensCard);
 
   const backupCard = Card({ style: "margin-bottom:14px" });
-  backupCard.appendChild(el("div", { style: "font-size:11.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:8px" }, "Backup / consolidação entre aparelhos"));
-  backupCard.appendChild(el("p", { style: "font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;line-height:1.5" }, "Como cada celular guarda os dados localmente, use estes botões para juntar o trabalho de vários técnicos em um único aparelho, ou para ter uma cópia de segurança."));
-  const backupRow = el("div", { class: "row" });
-  const exportBtn = el("button", { class: "ghost-btn", style: "flex:1;padding:10px" }, "Exportar backup (.json)");
-  exportBtn.addEventListener("click", async () => {
-    const all = { schemaVersion: 4, appVersion: APP_VERSION, config: state.config, vistorias: await idbGetAll("vistorias"), orderedParts: state.orderedParts, exportadoEm: new Date().toISOString() };
-    download(`backup-inspecoes-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(all), "application/json");
-  });
-  const importInput = el("input", { type: "file", accept: "application/json", style: "display:none" });
-  const importBtn = el("button", { class: "ghost-btn", style: "flex:1;padding:10px" }, "Importar backup");
-  importBtn.addEventListener("click", () => importInput.click());
-  importInput.addEventListener("change", async (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
+  backupCard.appendChild(el("div", { style: "font-size:11.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:8px" }, "Backup"));
+  backupCard.appendChild(el("p", { style: "font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;line-height:1.5" }, "Guarde uma cópia de segurança deste aparelho, ou restaure um backup feito neste mesmo aparelho."));
+  const exportZipBtn = el("button", { class: "ghost-btn", style: "width:100%;padding:10px;margin-bottom:8px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px" }, el("span", { html: svg("download", 16) }), "Exportar pacote ZIP completo (.zip)");
+  exportZipBtn.addEventListener("click", async () => {
+    const modal = showProgressModal("Exportando Pacote ZIP", "Iniciando empacotamento...");
     try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      if (Array.isArray(data.vistorias)) { for (const v of data.vistorias) { const nv=normalizeVistoria(v); await idbSet("vistorias", undefined, compactVistoriaForStorage(nv)); } }
-      if (data.config && typeof data.config === "object") { state.config = { ...DEFAULT_CONFIG, ...data.config, itens: mergeCatalog(data.config.itens || []) }; await idbSet("config", "main", state.config); }
-      if (data.orderedParts && typeof data.orderedParts === "object") { state.orderedParts = data.orderedParts; await idbSet("parts", "main", state.orderedParts); }
-      await persistVistoriaList();
-      alert(`Backup restaurado: ${(data.vistorias || []).length} inspeção(ões)${data.config ? ", configurações" : ""}${data.orderedParts ? ", lista de peças" : ""}.`);
-      render();
-    } catch (err) { alert("Arquivo inválido."); }
+      await downloadZipBackup(`backup-inspecoes-${new Date().toISOString().slice(0, 10)}.zip`, (cur, tot, detail) => {
+        modal.update(cur, tot, detail);
+      });
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao gerar ZIP: " + err.message);
+    } finally {
+      modal.close();
+    }
   });
-  backupRow.appendChild(exportBtn); backupRow.appendChild(importBtn);
-  backupCard.appendChild(backupRow);
-  backupCard.appendChild(importInput);
+  backupCard.appendChild(exportZipBtn);
+  const exportBtn = el("button", { class: "ghost-btn", style: "width:100%;padding:8px;margin-bottom:8px;font-size:12px;color:var(--ink-soft)" }, "Exportar em JSON legado (.json)");
+  exportBtn.addEventListener("click", async () => {
+    const modal = showProgressModal("Exportando Backup JSON", "Processando fotos...");
+    try {
+      await downloadFullBackup(`backup-inspecoes-${new Date().toISOString().slice(0, 10)}.json`);
+    } finally {
+      modal.close();
+    }
+  });
+  backupCard.appendChild(exportBtn);
+  const restoreInput = el("input", { type: "file", accept: ".zip,.json,application/zip,application/json", style: "display:none" });
+  const restoreBtn = el("button", { class: "ghost-btn", style: "width:100%;padding:10px" }, "Restaurar backup (.zip ou .json)");
+  restoreBtn.addEventListener("click", () => restoreInput.click());
+  restoreInput.addEventListener("change", async (e) => {
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    if (!confirm("Isso vai SUBSTITUIR TODOS os dados deste aparelho pelos do arquivo. Um backup de segurança do estado atual será baixado antes. Continuar?")) { e.target.value = ""; return; }
+    const modal = showProgressModal("Restaurando Backup", "Lendo arquivo...");
+    try {
+      let data = null;
+      let zipPhotosMap = null;
+      if (file.name.endsWith(".zip") || file.type.includes("zip")) {
+        modal.setStep("Descompactando pacote ZIP...");
+        const filesMap = await parseZipBlob(file);
+        const manifestEntry = filesMap.get("manifest.json");
+        if (!manifestEntry) throw new Error("Pacote ZIP não contém manifest.json");
+        data = JSON.parse(manifestEntry.text());
+        zipPhotosMap = filesMap;
+      } else {
+        data = JSON.parse(await file.text());
+      }
+
+      modal.setStep("Executando preflight de integridade do pacote...");
+      await preflightImportPackage(data, zipPhotosMap);
+
+      modal.setStep("Gerando backup de segurança do estado local...");
+      await downloadZipBackup(`backup-seguranca-antes-restaurar-${new Date().toISOString().replace(/[:.]/g, "-")}.zip`, null, true);
+
+      const localAll = await idbGetAll("vistorias");
+      const incomingIds = new Set(data.vistorias.map((v) => v.id));
+      const toDelete = localAll.filter((v) => !incomingIds.has(v.id)).map((v) => ({ store: "vistorias", key: v.id }));
+      const localAllPhotos = await idbGetAll("photos");
+      const incomingPhotoIds = new Set((data.photos || []).map((p) => p.id));
+      const photosToDelete = localAllPhotos.filter((p) => !incomingPhotoIds.has(p.id)).map((p) => ({ store: "photos", key: p.id }));
+      const allToDelete = [...toDelete, ...photosToDelete];
+
+      modal.setStep("Processando vistorias e evidências...");
+      const items = data.vistorias.map((raw) => ({ store: "vistorias", key: undefined, value: compactVistoriaForStorage(normalizeVistoria(raw)) }));
+
+      if (Array.isArray(data.photos)) {
+        const totalP = data.photos.length;
+        for (let idx = 0; idx < totalP; idx++) {
+          const rawP = data.photos[idx];
+          if (!rawP.id) continue;
+          let blob = null;
+          if (zipPhotosMap && rawP.path && zipPhotosMap.has(rawP.path)) {
+            blob = zipPhotosMap.get(rawP.path).blob(rawP.mimeType || "image/jpeg");
+          } else if (rawP.blobBase64) {
+            blob = base64ToBlob(rawP.blobBase64, rawP.mimeType || "image/jpeg");
+          }
+          if (blob) {
+            items.push({
+              store: "photos",
+              key: undefined,
+              value: {
+                id: rawP.id,
+                vistoriaId: rawP.vistoriaId,
+                occurrenceId: rawP.occurrenceId,
+                blob: blob,
+                mimeType: rawP.mimeType || "image/jpeg",
+                width: rawP.width,
+                height: rawP.height,
+                size: rawP.size || blob.size,
+                createdAt: rawP.createdAt || nowIso(),
+                deviceOrigin: rawP.deviceOrigin || getDeviceId(),
+                updatedAt: rawP.updatedAt || nowIso(),
+                deletedAt: rawP.deletedAt || null
+              }
+            });
+          }
+          if (idx % 10 === 0) {
+            modal.update(idx, totalP, "Reconstituindo fotos");
+            await new Promise((r) => setTimeout(r, 0));
+          }
+        }
+      }
+
+      if (data.config && typeof data.config === "object") { state.config = { ...DEFAULT_CONFIG, ...data.config, itens: mergeCatalog(data.config.itens || []) }; items.push({ store: "config", key: "main", value: state.config }); }
+      if (data.orderedParts && typeof data.orderedParts === "object") { state.orderedParts = data.orderedParts; items.push({ store: "parts", key: "main", value: state.orderedParts }); }
+      items.push({ store: "config", key: "deletedVistorias", value: data.deletedVistorias && typeof data.deletedVistorias === "object" ? data.deletedVistorias : {} });
+
+      modal.setStep("Gravando transação no IndexedDB...");
+      await idbTransactionApply(items, allToDelete);
+      await persistVistoriaList();
+      modal.setStep("Verificando integridade pós-restauração...");
+      const postInteg = await checkPhotoIntegrity(await idbGetAll("vistorias"));
+      modal.close();
+      if (postInteg.isClean) {
+        alert(`Backup restaurado com sucesso! ${data.vistorias.length} inspeção(ões) restaurada(s) com 100% de integridade.\nO backup de segurança do estado anterior foi baixado.`);
+      } else {
+        alert(`Backup restaurado com atenção: ${postInteg.missing.length} inconsistência(s) detectada(s). Verifique a tela Saúde dos dados.`);
+      }
+      render();
+    } catch (err) {
+      console.error(err);
+      modal.close();
+      alert("Não foi possível restaurar: " + err.message);
+    } finally {
+      e.target.value = "";
+    }
+  });
+  backupCard.appendChild(restoreBtn); backupCard.appendChild(restoreInput);
   wrap.appendChild(backupCard);
+
+  const mergeCard = Card({ style: "margin-bottom:14px" });
+  mergeCard.appendChild(el("div", { style: "font-size:11.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:8px" }, "Consolidar aparelhos"));
+  mergeCard.appendChild(el("p", { style: "font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;line-height:1.5" }, "Use quando técnicos diferentes trabalharam na MESMA inspeção em celulares diferentes (ex: um fez o Visual, outro fez o Prumo). Isso MESCLA os dados por data de alteração — não apaga nada às cegas. Um backup de segurança é baixado antes."));
+  mergeCard.appendChild(el("p", { style: "font-size:12px;color:var(--amber-dark);background:var(--amber-bg);border-radius:8px;padding:8px 10px;margin:0 0 10px;line-height:1.5" }, "⚠ Importante: os dois aparelhos precisam ter partido da MESMA inspeção (um cria, exporta, o outro importa esse arquivo antes de começar). Se cada um criar a inspeção separadamente — mesmo com o mesmo nome de loja — o app não tem como saber que é o mesmo trabalho, e elas ficam como duas inspeções distintas."));
+  const mergeInput = el("input", { type: "file", accept: ".zip,.json,application/zip,application/json", style: "display:none" });
+  const mergeBtn = el("button", { class: "ghost-btn", style: "width:100%;padding:10px" }, "＋ Consolidar com arquivo de outro aparelho");
+  mergeBtn.addEventListener("click", () => mergeInput.click());
+  mergeInput.addEventListener("change", async (e) => {
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    const modal = showProgressModal("Consolidando Aparelhos", "Lendo arquivo...");
+    try {
+      let data = null;
+      let zipPhotosMap = null;
+      if (file.name.endsWith(".zip") || file.type.includes("zip")) {
+        modal.setStep("Descompactando pacote ZIP...");
+        const filesMap = await parseZipBlob(file);
+        const manifestEntry = filesMap.get("manifest.json");
+        if (!manifestEntry) throw new Error("Pacote ZIP não contém manifest.json");
+        data = JSON.parse(manifestEntry.text());
+        zipPhotosMap = filesMap;
+      } else {
+        data = JSON.parse(await file.text());
+      }
+      if (!Array.isArray(data.vistorias)) { modal.close(); alert("Arquivo não contém inspeções."); return; }
+      modal.setStep("Executando preflight de integridade do pacote...");
+      await preflightImportPackage(data, zipPhotosMap);
+      const schemaOk = typeof data.schemaVersion === "number" && data.schemaVersion >= MERGE_SCHEMA_VERSION;
+      if (!schemaOk) {
+        alert(`Este backup foi criado por uma versão mais antiga do app (versão do arquivo: ${data.schemaVersion || "desconhecida"}, mínima exigida: ${MERGE_SCHEMA_VERSION}) e não tem os metadados necessários pra mesclar com segurança.\n\nRestaurar esse arquivo continua funcionando normalmente. Pra Consolidar, gere um backup novo neste e no outro aparelho (Ajustes → Exportar backup, depois de atualizar os dois pra esta versão) e tente de novo.`);
+        e.target.value = ""; return;
+      }
+
+      const localDeleted = await getDeletedVistoriaIds();
+      const incomingDeleted = data.deletedVistorias && typeof data.deletedVistorias === "object" ? data.deletedVistorias : {};
+      const mergedDeleted = mergeTombstoneMap(localDeleted, incomingDeleted); // funciona nos dois sentidos, não só quando quem recebe já tinha o tombstone
+
+      const localAll = await idbGetAll("vistorias");
+      const localById = new Map(localAll.map((v) => [v.id, normalizeVistoria(v)]));
+      const toWrite = [];
+      const toDelete = [];
+      const reports = [];
+      const duplicados = [];
+      let novas = 0, resucitadasBloqueadas = 0, excluidasPorTombstoneDoArquivo = 0;
+
+      // vistorias que o arquivo diz terem sido excluídas em outro aparelho, mas que ainda existem aqui
+      for (const [id, tomb] of Object.entries(incomingDeleted)) {
+        const local = localById.get(id);
+        if (local && newer(tomb.deletedAt, vistoriaLatestMeaningfulTouch(local)) >= 0) { toDelete.push({ store: "vistorias", key: id }); excluidasPorTombstoneDoArquivo++; }
+      }
+
+      for (const raw of data.vistorias) {
+        const incoming = normalizeVistoria(raw);
+        const local = localById.get(incoming.id);
+        if (!local) {
+          const tomb = mergedDeleted[incoming.id];
+          if (tomb && newer(tomb.deletedAt, vistoriaLatestMeaningfulTouch(incoming)) >= 0) { resucitadasBloqueadas++; continue; }
+          toWrite.push(incoming); novas++; continue;
+        }
+        const merged = mergeVistorias(local, incoming);
+        toWrite.push(merged);
+        reports.push({ lojaCd: merged.lojaCd, ...merged.lastMergeReport });
+        if (merged.lastMergeReport.codigosDuplicados.length) duplicados.push({ lojaCd: merged.lojaCd, itens: merged.lastMergeReport.codigosDuplicados });
+      }
+
+      // Preflight: se houver duplicidade de código, avisa ANTES de gravar qualquer coisa (nada foi escrito ainda).
+      if (duplicados.length) {
+        const msg = `⚠ A consolidação encontrou estrutura(s) com código duplicado:\n` + duplicados.map((d) => `• ${d.lojaCd}: ${d.itens.map((i) => i.codigo).join(", ")}`).join("\n") + `\n\nIsso não é perda de dados — as duas estruturas serão mantidas — mas você vai precisar renomear uma delas manualmente depois.\n\nConsolidar mesmo assim?`;
+        if (!confirm(msg)) { e.target.value = ""; return; }
+      }
+
+      modal.setStep("Gerando backup de segurança do estado local...");
+      const safetyBackupRes = await downloadZipBackup(`backup-seguranca-antes-consolidar-${new Date().toISOString().replace(/[:.]/g, "-")}.zip`, null, true);
+
+      // Declarado no escopo da função para garantir disponibilidade no pre-commit validation
+      const localPhotos = await idbGetAll("photos");
+      const localPhotoMap = new Map(localPhotos.map((p) => [p.id, p]));
+
+      // Todo o merge já foi calculado com sucesso. Só agora grava tudo numa única transação (tudo ou nada).
+      const items = toWrite.map((v) => ({ store: "vistorias", key: undefined, value: compactVistoriaForStorage(v) }));
+      if (Array.isArray(data.photos)) {
+        const totalP = data.photos.length;
+        for (let idx = 0; idx < totalP; idx++) {
+          const rawP = data.photos[idx];
+          if (!rawP.id) continue;
+          const existing = localPhotoMap.get(rawP.id);
+          const existingIsValid = existing && existing.blob && (existing.blob.size > 0 || (existing.blob.byteLength && existing.blob.byteLength > 0));
+
+          // Self-Healing: Importa se não existe localmente OU se o registro local possui Blob vazio/inválido
+          if (!existingIsValid) {
+            let blob = null;
+            if (zipPhotosMap && rawP.path && zipPhotosMap.has(rawP.path)) {
+              blob = zipPhotosMap.get(rawP.path).blob(rawP.mimeType || "image/jpeg");
+            } else if (rawP.blobBase64) {
+              blob = base64ToBlob(rawP.blobBase64, rawP.mimeType || "image/jpeg");
+            }
+            if (blob && (blob.size > 0 || (blob.byteLength && blob.byteLength > 0))) {
+              items.push({
+                store: "photos",
+                key: undefined,
+                value: {
+                  id: rawP.id,
+                  vistoriaId: rawP.vistoriaId,
+                  occurrenceId: rawP.occurrenceId,
+                  blob: blob,
+                  mimeType: rawP.mimeType || "image/jpeg",
+                  width: rawP.width,
+                  height: rawP.height,
+                  size: rawP.size || blob.size,
+                  createdAt: rawP.createdAt || (existing && existing.createdAt) || nowIso(),
+                  deviceOrigin: rawP.deviceOrigin || (existing && existing.deviceOrigin) || getDeviceId(),
+                  updatedAt: rawP.updatedAt || nowIso(),
+                  deletedAt: rawP.deletedAt || null
+                }
+              });
+            }
+          }
+          if (idx % 10 === 0) {
+            modal.update(idx, totalP, "Mesclando/Reparando evidências");
+            await new Promise((r) => setTimeout(r, 0));
+          }
+        }
+      }
+
+      // Validação pré-commit do estado candidato: todas as fotos ativas pós-merge devem estar satisfeitas
+      const candidatePhotoIds = new Set();
+      for (const item of items) {
+        if (item.store === "photos" && item.value && item.value.id) candidatePhotoIds.add(item.value.id);
+      }
+      for (const p of localPhotos) {
+        if (p.blob && (p.blob.size > 0 || (p.blob.byteLength && p.blob.byteLength > 0))) candidatePhotoIds.add(p.id);
+      }
+
+      for (const v of toWrite) {
+        for (const e of (v.estruturas || [])) {
+          for (const it of (e.itensEstrutura || [])) {
+            for (const oc of (it.ocorrencias || [])) {
+              for (const pid of occurrencePhotoRefs(oc)) {
+                if (pid && pid.startsWith("pho_") && !candidatePhotoIds.has(pid)) {
+                  throw new Error(`Commit abortado: a evidência '${pid}' permaneceria sem Blob válido após o merge.`);
+                }
+              }
+            }
+          }
+          for (const m of (e.montantes || [])) {
+            for (const it of (m.itens || [])) {
+              for (const oc of (it.ocorrencias || [])) {
+                for (const pid of occurrencePhotoRefs(oc)) {
+                  if (pid && pid.startsWith("pho_") && !candidatePhotoIds.has(pid)) {
+                    throw new Error(`Commit abortado: a evidência '${pid}' permaneceria sem Blob válido após o merge.`);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      items.push({ store: "config", key: "deletedVistorias", value: mergedDeleted });
+      modal.setStep("Gravando transação atômica...");
+      await idbTransactionApply(items, toDelete);
+      await persistVistoriaList();
+
+      modal.setStep("Verificando integridade pós-consolidação...");
+      const postInteg = await checkPhotoIntegrity(await idbGetAll("vistorias"));
+      const resumo = reports.map((r) => `• ${r.lojaCd || "(sem nome)"}: +${r.added} novo(s), ${r.updated} atualizado(s), ${r.keptLocal} mantido(s) local, ${r.deletedByTombstone} exclusão(ões) respeitada(s)${r.conflicts.length ? `, ${r.conflicts.length} conflito(s)` : ""}`).join("\n");
+      const detalhesConflitos = reports.flatMap((r) => r.conflicts.filter((c) => c.tipo === "ocorrencia").map((c) =>
+        `  ⚠ Ocorrência em conflito (venceu ${c.resolvido === "incoming" ? "a do arquivo" : "a local"}, fotos unidas: ${c.fotosUnificadas}):\n    Versão local: ${c.versaoA.grauTxt || "—"} · ${c.versaoA.descTxt || "—"} · ${c.versaoA.fotos} foto(s)\n    Versão do arquivo: ${c.versaoB.grauTxt || "—"} · ${c.versaoB.descTxt || "—"} · ${c.versaoB.fotos} foto(s)`
+      ));
+      const avisoConflitos = detalhesConflitos.length ? `\n\n${detalhesConflitos.join("\n")}` : "";
+      const avisoResucitadas = resucitadasBloqueadas ? `\n${resucitadasBloqueadas} inspeção(ões) do arquivo não foram adicionadas por já terem sido excluídas neste aparelho.` : "";
+      const avisoExcluidasPeloArquivo = excluidasPorTombstoneDoArquivo ? `\n${excluidasPorTombstoneDoArquivo} inspeção(ões) foram removidas daqui por terem sido excluídas no outro aparelho.` : "";
+
+      let statusIntegridade = "";
+      if (postInteg.isClean) {
+        statusIntegridade = `\n\n✓ Integridade pós-merge: 100% íntegro (${postInteg.totalValid} evidências vinculadas e válidas no aparelho).`;
+      } else {
+        statusIntegridade = `\n\n⚠ Atenção pós-merge: ${postInteg.missing.length} evidência(s) com inconsistência detectada.`;
+      }
+
+      let statusBackup = "";
+      if (safetyBackupRes && safetyBackupRes.isDegraded) {
+        statusBackup = `\nNota: Foi salvo um snapshot de emergência prévio (estado local degradado).`;
+      } else {
+        statusBackup = `\nO backup de segurança do estado anterior foi baixado.`;
+      }
+
+      modal.close();
+      alert(`Consolidação concluída com sucesso!\n${novas} inspeção(ões) nova(s) adicionada(s).\n${reports.length} inspeção(ões) mescladas:\n${resumo || "—"}${avisoResucitadas}${avisoExcluidasPeloArquivo}${avisoConflitos}${statusIntegridade}\n\n${statusBackup}`);
+      render();
+    } catch (err) { console.error(err); modal.close(); alert("Não foi possível consolidar este arquivo: " + err.message); } finally { e.target.value = ""; }
+  });
+  mergeCard.appendChild(mergeBtn); mergeCard.appendChild(mergeInput);
+  wrap.appendChild(mergeCard);
+
+  const healthCard = Card({ style: "margin-bottom:14px" });
+  healthCard.appendChild(el("div", { style: "font-size:11.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:8px" }, "Saúde dos dados"));
+  const healthBody = el("div", { style: "font-size:12.5px;color:var(--ink-soft);line-height:1.7" }, "Verificando…");
+  healthCard.appendChild(healthBody);
+  wrap.appendChild(healthCard);
+  (async () => {
+    const lines = [];
+    lines.push(`ID deste aparelho: ${await ensureDeviceId()}`);
+    try {
+      if (navigator.storage && navigator.storage.persisted) {
+        let persisted = await navigator.storage.persisted();
+        if (!persisted && navigator.storage.persist) persisted = await navigator.storage.persist();
+        lines.push(persisted ? "✓ Armazenamento persistente concedido (o sistema evita apagar os dados sob pouco espaço)." : "⚠ Armazenamento persistente NÃO concedido — o sistema pode limpar os dados sob pouco espaço.");
+      } else lines.push("Este navegador não informa o status de armazenamento persistente.");
+    } catch (err) { lines.push("Não foi possível verificar armazenamento persistente."); }
+    try {
+      if (navigator.storage && navigator.storage.estimate) {
+        const est = await navigator.storage.estimate();
+        const usedMb = (est.usage / 1024 / 1024).toFixed(1), quotaMb = (est.quota / 1024 / 1024).toFixed(0);
+        lines.push(`Uso estimado: ${usedMb} MB de ~${quotaMb} MB disponíveis.`);
+      }
+    } catch (err) { /* segue sem essa info */ }
+    try {
+      const integrity = await checkPhotoIntegrity(await idbGetAll("vistorias"));
+      lines.push(integrity.isClean ? `✓ Integridade de fotos: ${integrity.totalValid} evidência(s) vinculadas e válidas.` : `⚠ Atenção: ${integrity.missing.length} foto(s) com referência pendente.`);
+    } catch (err) { /* segue */ }
+    healthBody.innerHTML = ""; lines.forEach((l) => healthBody.appendChild(el("div", {}, l)));
+  })();
 
   const saveBtn = el("button", { class: "submit-btn", style: "width:100%" }, "Salvar configurações");
   saveBtn.addEventListener("click", async () => {
