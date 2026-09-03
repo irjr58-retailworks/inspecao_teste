@@ -83,9 +83,10 @@ const DEFAULT_ITEMS = [
   { id: "luminaria", codigo: "9.34", categoria: "Iluminação", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Altura das luminárias prejudicando operações de carga e descarga", descOpcoes: ["ALTURA DAS LUMINÁRIAS INADEQUADAS"], peca: "Altura das luminárias prejudicando operações de carga e descarga" },
   { id: "piso", codigo: "9.37", categoria: "Gerais", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras", descOpcoes: ["PISO INDUSTRIAL DANIFICADO", "PISO INDUSTRIAL DESNIVELADO", "PAREDE DO PRÉDIO DANIFICADA", "COLUNA DO PRÉDIO DANIFICADA", "ÁGUA EMPOÇADA", "GOTEIRA", "OUTROS"], localOpcoes: ["FRONTAL", "TRASEIRA"], peca: "Parede do prédio e/ou piso industrial danificados, água empoçada ou goteiras" },
   { id: "iluminacao", codigo: "9.45", categoria: "Iluminação", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Aferição de iluminação nos corredores", tipo: "medicao", unidade: "lux", min: 200, peca: "Aferição de iluminação nos corredores" },
+  { id: "lux", codigo: "9.45", categoria: "Iluminação", familia: "Ambiente e Iluminação", nivel: "montante", nome: "Aferição de iluminação no montante", tipo: "medicao", unidade: "lux", min: 200, peca: "Aferição de iluminação no montante" },
 ];
-const APP_VERSION = "2.18.5";
-const APP_VERSION_DATE = "01/09/2026";
+const APP_VERSION = "2.19.0-RC1";
+const APP_VERSION_DATE = "02/09/2026";
 const CATALOG_VERSION = 5;
 const DEFAULT_CONFIG = {
   empresa: "Minha Empresa",
@@ -142,10 +143,12 @@ function touchMeta(obj) { if (obj) { obj.metaUpdatedAt = nowIso(); obj.metaDevic
 function touchMontante(m, e) { if (m) { m.updatedAt = nowIso(); m.deviceOrigin = getDeviceId(); } if (e) touchStage(e, "visual"); }
 function touchMontanteMeta(m, e) { if (m) { m.metaUpdatedAt = nowIso(); m.metaDeviceOrigin = getDeviceId(); } }
 function touchResolvido(e) { if (e) { e.resolvidoUpdatedAt = nowIso(); e.resolvidoDeviceOrigin = getDeviceId(); } }
+function touchWorkflowConfig(v) { if (v) { v.configUpdatedAt = nowIso(); v.configDeviceOrigin = getDeviceId(); } return v; }
+function touchLuxNaoAplica(e) { if (e) { e.luxNaoAplicaUpdatedAt = nowIso(); e.luxNaoAplicaDeviceOrigin = getDeviceId(); } return e; }
 function stageForItem(item) {
   if (!item) return "visual";
   if (item.id === "prumo") return "prumo";
-  if (item.id === "iluminacao") return "lux";
+  if (item.id === "iluminacao" || item.id === "lux") return "lux";
   return "visual";
 }
 function touchOccurrence(oc) { if (oc) { oc.updatedAt = nowIso(); oc.deviceOrigin = getDeviceId(); } return oc; }
@@ -213,7 +216,79 @@ function prumoStatusFromDesc(desc) {
   if (t.includes("NO PRUMO") || t.includes("NA TOLERÂNCIA")) return "ok";
   return "pendente";
 }
+function isPrumoHabilitado(v) {
+  if (!v || !v.workflowConfig) return true; // legado
+  return v.workflowConfig.prumoHabilitado !== false;
+}
+function podeEntrarNoPrumo(v) {
+  if (!v || !v.workflowConfig) return true; // legado sem workflowConfig
+  return v.workflowConfig.prumoHabilitado === true;
+}
+function isLuxHabilitado(v) {
+  if (!v || !v.workflowConfig) return true; // legado
+  return v.workflowConfig.luxHabilitado !== false;
+}
+function getLuxMetodo(v) {
+  if (!v || !v.workflowConfig) return "LEGADO";
+  if (!v.workflowConfig.luxMetodo) return null;
+  return v.workflowConfig.luxMetodo === "B" ? "B" : "A";
+}
+function luxTemDados(v) {
+  if (!v || !v.estruturas) return false;
+  for (const e of v.estruturas) {
+    const it = iluminacaoItem(e);
+    if (it && Array.isArray(it.ocorrencias)) {
+      for (const oc of it.ocorrencias) {
+        if (oc.status === "naoaplica" || (oc.valor !== undefined && oc.valor !== null && String(oc.valor).trim() !== "")) {
+          return true;
+        }
+      }
+    }
+    for (const m of (e.montantes || [])) {
+      const lIt = (m.itens || []).find((x) => x.id === "lux");
+      if (lIt) {
+        if (lIt.status === "naoaplica" || (lIt.valor !== undefined && lIt.valor !== null && String(lIt.valor).trim() !== "")) {
+          return true;
+        }
+        for (const oc of (lIt.ocorrencias || [])) {
+          if (oc.status === "naoaplica" || (oc.valor !== undefined && oc.valor !== null && String(oc.valor).trim() !== "")) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+function calculateLuxStats(points) {
+  const validNumbers = [];
+  let naoAplicaCount = 0;
+  (points || []).forEach((p) => {
+    if (!p) return;
+    if (p.status === "naoaplica") {
+      naoAplicaCount++;
+      return;
+    }
+    const rawVal = p.valor !== undefined && p.valor !== null ? String(p.valor).trim() : "";
+    if (rawVal === "") return;
+    const num = parseFloat(rawVal.replace(",", "."));
+    if (!isNaN(num)) {
+      validNumbers.push(num);
+    }
+  });
+  if (!validNumbers.length) {
+    return { count: 0, min: null, max: null, avg: null, naoAplicaCount };
+  }
+  const min = Math.min(...validNumbers);
+  const max = Math.max(...validNumbers);
+  const sum = validNumbers.reduce((a, b) => a + b, 0);
+  const avg = Math.round((sum / validNumbers.length) * 10) / 10;
+  return { count: validNumbers.length, min, max, avg, naoAplicaCount };
+}
+function montanteLuxItem(m) { return (m.itens || []).find((it) => it.id === "lux") || null; }
+
 function ocorrenciaStatus(oc, item) {
+  if (oc && oc.status === "naoaplica") return "naoaplica";
   if (item && item.tipo === "medicao") return statusFromMedicao(oc && oc.valor, item.min);
   if (item && item.id === "prumo") return prumoStatusFromDesc(oc && oc.descTxt);
   return (oc && oc.status) || "problema";
@@ -242,8 +317,14 @@ function montanteItemStatus(item) {
   if (occ.includes("pendente")) return "pendente";
   if (occ.length && occ.every((s) => s === "ok" || s === "naoaplica")) return "ok";
   if (item.status === "naoaplica") return "naoaplica";
-  if (item.revisado || item.status === "ok") return "ok";
+  if (item.tipo === "medicao") {
+    if (item.valor !== undefined && item.valor !== null && String(item.valor).trim() !== "") {
+      return statusFromMedicao(item.valor, item.min);
+    }
+    return "pendente";
+  }
   if (item.status === "problema") return "problema"; // compatibilidade com v2.14
+  if (item.revisado || item.status === "ok") return "ok";
   return "pendente";
 }
 function syncMontanteItemStatus(item) { item.status = montanteItemStatus(item); return item.status; }
@@ -267,6 +348,15 @@ function normalizeMontanteItem(item) {
 }
 function normalizeVistoria(v) {
   if (!v) return v;
+  if (v.workflowConfig) {
+    v.workflowConfig = {
+      prumoHabilitado: v.workflowConfig.prumoHabilitado === false ? false : (v.workflowConfig.prumoHabilitado === true ? true : null),
+      prumoMotivo: v.workflowConfig.prumoMotivo || "",
+      luxHabilitado: v.workflowConfig.luxHabilitado === false ? false : (v.workflowConfig.luxHabilitado === true ? true : null),
+      luxMotivo: v.workflowConfig.luxMotivo || "",
+      luxMetodo: v.workflowConfig.luxMetodo === "B" ? "B" : (v.workflowConfig.luxMetodo === "A" ? "A" : null)
+    };
+  }
   const estCatalog = itensEstruturaCatalogo(state.config);
   const montCatalog = itensMontante(state.config);
   (v.estruturas || []).forEach((e) => {
@@ -277,6 +367,7 @@ function normalizeVistoria(v) {
     if (e.visualFinalizada == null) e.visualFinalizada = Boolean(e.finalizada);
     if (e.prumoFinalizada == null) e.prumoFinalizada = Boolean(e.finalizada);
     if (e.luxFinalizada == null) e.luxFinalizada = Boolean(e.finalizada);
+    if (e.luxNaoAplica == null) e.luxNaoAplica = false;
 
     // v2.17.1: reidrata os itens estáticos do catálogo. No banco ficam apenas os dados de execução.
     const storedEst = Array.isArray(e.itensEstrutura) ? e.itensEstrutura : [];
@@ -302,7 +393,7 @@ function normalizeVistoria(v) {
         const runtime = byId.get(base.id);
         const it = { ...base, ...(runtime || {}), status: runtime && runtime.status ? runtime.status : "pendente", revisado: Boolean(runtime && runtime.revisado), ocorrencias: runtime && Array.isArray(runtime.ocorrencias) ? runtime.ocorrencias : [], valor: runtime && runtime.valor || "", qtd: runtime && runtime.qtd != null ? runtime.qtd : 1, correcao: runtime && runtime.correcao || "" };
         // Itens visuais conformes não precisam ser gravados individualmente quando o montante já foi concluído.
-        if (!runtime && m.visualInspecionadoAt && base.id !== "prumo") { it.revisado = true; it.status = "ok"; }
+        if (!runtime && m.visualInspecionadoAt && base.id !== "prumo" && base.id !== "lux") { it.revisado = true; it.status = "ok"; }
         return normalizeMontanteItem(it);
       });
       stored.filter((it) => !montCatalog.some((b) => b.id === it.id)).forEach((it) => m.itens.push(normalizeMontanteItem(it)));
@@ -318,18 +409,23 @@ function montanteProblemEntries(e) {
     return [];
   }));
 }
+function montanteAnomalyEntries(e) {
+  return montanteProblemEntries(e).filter(({item}) => item.tipo !== "medicao");
+}
 function estruturaProblemOccurrences(e) {
   return (e.itensEstrutura || []).flatMap((it) => (it.ocorrencias || [])
     .filter((oc) => ocorrenciaStatus(oc, it) === "problema")
     .map((oc) => ({ it, oc })));
 }
+function estruturaAnomalyOccurrences(e) {
+  return estruturaProblemOccurrences(e).filter(({it}) => it.tipo !== "medicao");
+}
 function estruturaMedicoesInformativas(e) {
   return (e.itensEstrutura || []).flatMap((it) => it.tipo === "medicao" ? (it.ocorrencias || [])
-    .filter((oc) => ["ok", "naoaplica"].includes(ocorrenciaStatus(oc, it)))
     .map((oc) => ({ it, oc })) : []);
 }
 function visualItemsMontante(m, e) {
-  return (m.itens || []).filter((it) => it.id !== "prumo" && (!e || itemAplicavel(it, e)));
+  return (m.itens || []).filter((it) => it.id !== "prumo" && it.id !== "lux" && (!e || itemAplicavel(it, e)));
 }
 function visualStructureItems(e) {
   return (e.itensEstrutura || []).filter((it) => it.id !== "iluminacao");
@@ -372,22 +468,80 @@ function visualProgress(e) {
   const done = (e.montantes || []).filter((m) => visualMontanteDone(m, e)).length;
   return { total, done, pending: Math.max(total - done, 0), complete: Boolean(e.visualFinalizada) && total > 0 && done === total };
 }
-function prumoProgress(e) {
-  const total = (e.montantes || []).length;
-  const states = (e.montantes || []).map(prumoResolution);
+function prumoProgress(e, v = (typeof state !== "undefined" ? state.draftVistoria : null)) {
+  if (v && !isPrumoHabilitado(v)) {
+    const total = (e && e.montantes || []).length;
+    return { total, done: total, measured: 0, noAccess: 0, pending: 0, problems: 0, complete: true, disabled: true };
+  }
+  const total = (e && e.montantes || []).length;
+  const states = (e && e.montantes || []).map(prumoResolution);
   const done = states.filter((x) => x.resolved).length;
   const measured = states.filter((x) => x.measured).length;
   const noAccess = states.filter((x) => x.noAccess).length;
-  const problems = (e.montantes || []).filter((m) => { const it=prumoItem(m); return it && montanteItemStatus(it)==="problema"; }).length;
+  const problems = (e && e.montantes || []).filter((m) => { const it=prumoItem(m); return it && montanteItemStatus(it)==="problema"; }).length;
   return { total, done, measured, noAccess, pending: Math.max(total - done, 0), problems, complete: total > 0 && done === total };
 }
-function luxProgress(e) {
+function luxProgress(e, v = (typeof state !== "undefined" ? state.draftVistoria : null)) {
+  if (v && !isLuxHabilitado(v)) {
+    return { measurements: 0, pending: 0, problems: 0, complete: true, disabled: true };
+  }
+  if (e && e.luxNaoAplica) {
+    return { measurements: 0, pending: 0, problems: 0, complete: true, naoAplica: true };
+  }
+  const metodo = getLuxMetodo(v);
+  if (metodo === "B") {
+    const montantes = (e && e.montantes) || [];
+    const total = montantes.length;
+    let resolvedCount = 0;
+    let measurements = 0;
+    let problems = 0;
+    montantes.forEach((m) => {
+      const it = montanteLuxItem(m);
+      if (!it) return;
+      const occs = it.ocorrencias || [];
+      const occNaoAplica = occs.some((oc) => oc.status === "naoaplica");
+      const occValid = occs.some((oc) => oc.status !== "naoaplica" && oc.valor !== undefined && oc.valor !== null && String(oc.valor).trim() !== "");
+      const itNaoAplica = it.status === "naoaplica" || occNaoAplica;
+      const itValid = (it.valor !== undefined && it.valor !== null && String(it.valor).trim() !== "") || occValid;
+      if (itNaoAplica || itValid) {
+        resolvedCount++;
+        if (itValid && !itNaoAplica) {
+          measurements++;
+          if (montanteItemStatus(it) === "problema") problems++;
+        }
+      }
+    });
+    const complete = Boolean(e && e.luxFinalizada) && total > 0 && resolvedCount === total;
+    return { total, done: resolvedCount, measurements, pending: Math.max(total - resolvedCount, 0), problems, complete, metodo: "B" };
+  }
+  if (metodo === "A") {
+    const it = iluminacaoItem(e);
+    const occs = it ? (it.ocorrencias || []) : [];
+    const POSICOES = ["inicio", "meio", "final"];
+    let resolvedCount = 0;
+    let measurements = 0;
+    let problems = 0;
+    POSICOES.forEach((pos) => {
+      const oc = occs.find((o) => (o.posicao || "").toLowerCase() === pos);
+      if (!oc) return;
+      if (oc.status === "naoaplica") {
+        resolvedCount++;
+      } else if (oc.valor !== undefined && oc.valor !== null && String(oc.valor).trim() !== "") {
+        resolvedCount++;
+        measurements++;
+        if (ocorrenciaStatus(oc, it) === "problema") problems++;
+      }
+    });
+    const complete = Boolean(e && e.luxFinalizada) && resolvedCount === 3;
+    return { total: 3, done: resolvedCount, measurements, pending: Math.max(3 - resolvedCount, 0), problems, complete, metodo: "A" };
+  }
+  // LEGADO (v2.18.8 mantido intacto)
   const it = iluminacaoItem(e);
   const occs = it ? (it.ocorrencias || []) : [];
   const isValid = (oc) => Boolean(String(oc.montanteRef || "").trim()) && ocorrenciaStatus(oc, it) !== "pendente";
   const validOccs = occs.filter(isValid);
   const problems = validOccs.filter((oc) => ocorrenciaStatus(oc, it) === "problema").length;
-  return { measurements: validOccs.length, pending: occs.length - validOccs.length, problems, complete: Boolean(e.luxFinalizada) && validOccs.length > 0 && occs.length === validOccs.length };
+  return { measurements: validOccs.length, pending: occs.length - validOccs.length, problems, complete: Boolean(e && e.luxFinalizada) && validOccs.length > 0 && occs.length === validOccs.length, metodo: "LEGADO" };
 }
 function completeMontanteVisualAsInspected(m, e) {
   visualItemsMontante(m, e).forEach((it) => {
@@ -416,20 +570,22 @@ function inspectionStageSummary(v) {
   const estruturas = v.estruturas || [];
   const montantes = estruturas.flatMap((e) => e.montantes || []);
   const visualDone = estruturas.reduce((sum,e)=>sum + visualProgress(e).done,0);
-  const prumoDoneCount = estruturas.reduce((sum,e)=>sum + prumoProgress(e).done,0);
-  const luxDone = estruturas.filter((e)=>luxProgress(e).complete).length;
+  const prumoDoneCount = isPrumoHabilitado(v) ? estruturas.reduce((sum,e)=>sum + prumoProgress(e, v).done,0) : montantes.length;
+  const luxDone = isLuxHabilitado(v) ? estruturas.filter((e)=>luxProgress(e, v).complete).length : estruturas.length;
   return { estruturas: estruturas.length, montantes: montantes.length, visualDone, prumoDone: prumoDoneCount, luxDone };
 }
 function countPendingInspection(v) {
   let visualMontantes = 0, visualItens = 0, estruturaItens = 0, prumo = 0, luxEstruturas = 0;
+  const prumoHab = isPrumoHabilitado(v);
+  const luxHab = isLuxHabilitado(v);
   (v.estruturas || []).forEach((e) => {
     (e.montantes || []).forEach((m) => {
       const p = visualItemsMontante(m,e).filter((it) => montanteItemStatus(it) === "pendente").length;
       if (p || !m.visualInspecionadoAt) { visualMontantes++; visualItens += p; }
-      if (!prumoDone(m)) prumo++;
+      if (prumoHab && !prumoDone(m)) prumo++;
     });
     estruturaItens += visualStructureItems(e).filter((it) => estruturaEstItemStatus(it) === "pendente").length;
-    if (!luxProgress(e).complete) luxEstruturas++;
+    if (luxHab && !luxProgress(e, v).complete) luxEstruturas++;
   });
   return { visualMontantes, visualItens, estruturaItens, prumo, luxEstruturas, total: visualItens + estruturaItens + prumo + luxEstruturas };
 }
@@ -437,7 +593,7 @@ function countPendingInspection(v) {
 function nextStageStructure(v, current, mode) {
   const list = (v.estruturas || []).filter((e) => e.setupComplete && e.visualFinalizada);
   const currentIdx = list.findIndex((e) => e.id === current.id);
-  const pending = (e) => mode === "prumo" ? !prumoProgress(e).complete : !luxProgress(e).complete;
+  const pending = (e) => mode === "prumo" ? (podeEntrarNoPrumo(v) && !prumoProgress(e, v).complete) : (isLuxHabilitado(v) && !luxProgress(e, v).complete);
   for (let i = currentIdx + 1; i < list.length; i++) if (pending(list[i])) return list[i];
   for (let i = 0; i < currentIdx; i++) if (pending(list[i])) return list[i];
   return null;
@@ -488,7 +644,7 @@ function recentAnomalyChoices(v, limit = 5) {
     const montantes = (e.montantes || []).slice().sort((a,b)=>b.numero-a.numero);
     for (const m of montantes) {
       for (const item of (m.itens || [])) {
-        if (item.id === "prumo") continue;
+        if (item.id === "prumo" || item.id === "lux") continue;
         if (!(item.ocorrencias || []).some((oc)=>ocorrenciaStatus(oc,item)==="problema")) continue;
         if (seen.has(item.id)) continue;
         seen.add(item.id); out.push(item);
@@ -502,7 +658,7 @@ function lastVisualAnomalyBefore(e, currentM) {
   const montantes=(e.montantes||[]).filter((m)=>m.numero < currentM.numero).sort((a,b)=>b.numero-a.numero);
   for (const m of montantes) {
     for (const item of (m.itens||[]).slice().reverse()) {
-      if (item.id === "prumo") continue;
+      if (item.id === "prumo" || item.id === "lux") continue;
       const occ=(item.ocorrencias||[]).slice().reverse().find((oc)=>ocorrenciaStatus(oc,item)==="problema");
       if (occ) return { item, oc: occ, sourceMontante:m };
     }
@@ -1084,10 +1240,18 @@ async function downloadZipBackup(filename, onProgress, allowDegraded = false) {
   const integrity = await checkPhotoIntegrity(vistorias);
   let isDegraded = false;
   let finalFilename = filename;
+  // pendingMigration (fotos legadas ainda em base64, não convertidas pra Blob/photoId) precisa do mesmo
+  // gate que missing/corrompida: um ZIP "normal" não pode sair com esse pacote incompleto, só um
+  // snapshot degradado explícito. Sem isto, a foto pendente seria embutida em base64 dentro do próprio
+  // manifest.json (voltando ao formato antigo pra aquele registro) sem qualquer aviso ao usuário.
+  const needsDegraded = !integrity.isClean || integrity.pendingMigration.length > 0;
 
-  if (!integrity.isClean) {
+  if (needsDegraded) {
     if (!allowDegraded) {
-      throw new Error(`Exportação abortada: ${integrity.missing.length} evidência(s) ativa(s) estão ausentes ou corrompidas no banco local. Execute "Saúde dos dados" antes de exportar.`);
+      const motivos = [];
+      if (integrity.missing.length) motivos.push(`${integrity.missing.length} evidência(s) ausente(s)/corrompida(s)`);
+      if (integrity.pendingMigration.length) motivos.push(`${integrity.pendingMigration.length} foto(s) legada(s) ainda não migrada(s) (base64 pendente)`);
+      throw new Error(`Exportação abortada: ${motivos.join(" e ")} no banco local. Execute "Saúde dos dados" antes de exportar.`);
     } else {
       isDegraded = true;
       if (!finalFilename.includes("EMERGENCIA-DEGRADADO")) {
@@ -1141,7 +1305,7 @@ async function downloadZipBackup(filename, onProgress, allowDegraded = false) {
     exportadoEm: new Date().toISOString(),
     isDegradedBackup: isDegraded,
     emergencySnapshotNotice: isDegraded ? "Snapshot de emergência prévio (estado local degradado)" : undefined,
-    degradedReport: isDegraded ? integrity.missing : undefined
+    degradedReport: isDegraded ? { missing: integrity.missing, pendingMigration: integrity.pendingMigration } : undefined
   };
 
   fileEntries.unshift({ name: "manifest.json", data: JSON.stringify(manifest, null, 2) });
@@ -1192,7 +1356,7 @@ async function downloadFullBackup(filename) {
 /* ---------------- Persistência compacta v2.17.1 ---------------- */
 function compactOccurrenceForStorage(oc) {
   const out = {};
-  ["id","status","montanteRef","descTxt","tipoTxt","localTxt","grauTxt","corte","qtd","correcao","obs","valor","updatedAt","deviceOrigin"].forEach((k) => {
+  ["id","status","posicao","montanteRef","descTxt","tipoTxt","localTxt","grauTxt","corte","qtd","correcao","obs","valor","updatedAt","deviceOrigin"].forEach((k) => {
     const val = oc && oc[k];
     if (val !== undefined && val !== null && val !== "" && !(k === "qtd" && Number(val) === 1)) out[k] = val;
   });
@@ -1407,6 +1571,24 @@ function mergeEstrutura(localE, incomingE, tombA, tombB, report) {
       if (stage === "lux") { base.luxFinalizada = incomingE.luxFinalizada; base.luxFinalizadaAt = incomingE.luxFinalizadaAt; }
     }
   });
+  {
+    const la = localE.luxNaoAplicaUpdatedAt, ia = incomingE.luxNaoAplicaUpdatedAt;
+    const localTie = { deviceOrigin: localE.luxNaoAplicaDeviceOrigin, id: localE.id, updatedAt: la };
+    const incomingTie = { deviceOrigin: incomingE.luxNaoAplicaDeviceOrigin, id: incomingE.id, updatedAt: ia };
+    if ((la || ia) && resolveWinner(la, ia, localTie, incomingTie) === "incoming") {
+      base.luxNaoAplica = incomingE.luxNaoAplica;
+      base.luxNaoAplicaUpdatedAt = ia;
+      base.luxNaoAplicaDeviceOrigin = incomingE.luxNaoAplicaDeviceOrigin;
+    } else if (la || (!ia && localE.luxNaoAplica != null)) {
+      base.luxNaoAplica = localE.luxNaoAplica;
+      base.luxNaoAplicaUpdatedAt = la;
+      base.luxNaoAplicaDeviceOrigin = localE.luxNaoAplicaDeviceOrigin;
+    } else if (incomingE.luxNaoAplica != null) {
+      base.luxNaoAplica = incomingE.luxNaoAplica;
+      base.luxNaoAplicaUpdatedAt = ia;
+      base.luxNaoAplicaDeviceOrigin = incomingE.luxNaoAplicaDeviceOrigin;
+    }
+  }
   const montIdsSet = new Set([...(localE.montantes || []).map((m) => m.id), ...(incomingE.montantes || []).map((m) => m.id)]);
   const localMById = new Map((localE.montantes || []).map((m) => [m.id, m]));
   const incomingMById = new Map((incomingE.montantes || []).map((m) => [m.id, m]));
@@ -1448,6 +1630,18 @@ function mergeVistorias(local, incoming) {
       rootBase = { ...rootBase, lojaCd: incoming.lojaCd, local: incoming.local, data: incoming.data, inspetor: incoming.inspetor, metaUpdatedAt: ia, metaDeviceOrigin: incoming.metaDeviceOrigin };
     } else {
       rootBase = { ...rootBase, lojaCd: local.lojaCd, local: local.local, data: local.data, inspetor: local.inspetor, metaUpdatedAt: la, metaDeviceOrigin: local.metaDeviceOrigin };
+    }
+  }
+  {
+    const la = local.configUpdatedAt, ia = incoming.configUpdatedAt;
+    const localTie = { deviceOrigin: local.configDeviceOrigin, id: local.id, updatedAt: la };
+    const incomingTie = { deviceOrigin: incoming.configDeviceOrigin, id: incoming.id, updatedAt: ia };
+    if ((la || ia) && resolveWinner(la, ia, localTie, incomingTie) === "incoming") {
+      rootBase = { ...rootBase, workflowConfig: incoming.workflowConfig, configUpdatedAt: ia, configDeviceOrigin: incoming.configDeviceOrigin };
+    } else if (la || (!ia && local.workflowConfig)) {
+      rootBase = { ...rootBase, workflowConfig: local.workflowConfig, configUpdatedAt: la, configDeviceOrigin: local.configDeviceOrigin };
+    } else if (incoming.workflowConfig) {
+      rootBase = { ...rootBase, workflowConfig: incoming.workflowConfig, configUpdatedAt: ia, configDeviceOrigin: incoming.configDeviceOrigin };
     }
   }
   const idsSet = new Set([...(local.estruturas || []).map((e) => e.id), ...(incoming.estruturas || []).map((e) => e.id)]);
@@ -1496,7 +1690,7 @@ function compactVistoriaForStorage(v) {
         itensEstrutura: estCompact,
         montantes: montantes.map((m) => {
           const { itens = [], ...mrest } = m;
-          const itemCompact = itens.map((it) => compactRuntimeItemForStorage(it, Boolean(m.visualInspecionadoAt && it.id !== "prumo"))).filter(Boolean);
+          const itemCompact = itens.map((it) => compactRuntimeItemForStorage(it, Boolean(m.visualInspecionadoAt && it.id !== "prumo" && it.id !== "lux"))).filter(Boolean);
           return { ...mrest, itens: itemCompact };
         })
       };
@@ -1516,9 +1710,18 @@ async function checkPhotoIntegrity(vistorias) {
   const photoMap = new Map(allPhotos.map((p) => [p.id, p]));
   const missing = [];
   const valid = [];
+  const pendingMigration = [];
 
   const checkRefs = (oc, vId, context) => {
     for (const pid of occurrencePhotoRefs(oc)) {
+      if (typeof pid === "string" && pid.startsWith("data:image")) {
+        // Foto legada (< v2.18), ainda em base64 embutido — não é corrupção, mas a migração pra
+        // Blob/photoId ainda não terminou pra esta ocorrência. Antes, isto era simplesmente ignorado
+        // aqui (nem "válido" nem "ausente"), o que fazia o checador reportar "100% íntegro" de forma
+        // enganosa logo após um Restaurar de backup antigo, mesmo com fotos ainda não migradas.
+        pendingMigration.push({ vistoriaId: vId, occurrenceId: oc.id, context });
+        continue;
+      }
       if (pid && pid.startsWith("pho_")) {
         const rec = photoMap.get(pid);
         const hasValidBlob = rec && rec.blob && (rec.blob.size > 0 || (rec.blob.byteLength && rec.blob.byteLength > 0));
@@ -1553,7 +1756,9 @@ async function checkPhotoIntegrity(vistorias) {
       }
     }
   }
-  return { totalValid: valid.length, missing, isClean: missing.length === 0 };
+  // isClean continua significando "sem Blob ausente/corrompido" (não muda o contrato usado por
+  // downloadZipBackup etc.) — pendingMigration é informação NOVA e aditiva, nunca torna isClean=false.
+  return { totalValid: valid.length, missing, pendingMigration, isClean: missing.length === 0 };
 }
 
 /* ---------------- IndexedDB v4 ---------------- */
@@ -1654,27 +1859,64 @@ async function migrateLegacyBase64ToPhotos() {
       const photoValidations = [];
       
       const checkOccurrence = async (oc) => {
-        if (!oc || !Array.isArray(oc.fotos)) return;
+        if (!oc) return;
+        // T15: formato ainda mais antigo (pré-v2.14) — oc.foto (singular), sem oc.fotos (array) nenhum.
+        // Antes, a guarda abaixo (`!Array.isArray(oc.fotos)`) descartava a ocorrência inteira sem processar
+        // nada: a foto ficava presa em oc.foto pra sempre, nunca migrava, mesmo rodando de novo em todo boot.
+        // checkPhotoIntegrity() já reconhecia esse formato (via occurrencePhotoRefs), mas a migração não —
+        // agora os dois enxergam a mesma coisa.
+        if (!Array.isArray(oc.fotos) && typeof oc.foto === "string" && oc.foto.startsWith("data:image")) {
+          try {
+            const photoId = await deterministicPhotoIdFromBase64(oc.foto, oc.id, 0);
+            const blob = base64ToBlob(oc.foto);
+            // T14: base64 sintaticamente válida mas vazia ("data:image/jpeg;base64,") decodifica sem erro
+            // e gera Blob de tamanho 0 — sem esta checagem, isso virava um "photoId" fantasma apontando
+            // pra um Blob vazio no store, sem nunca aparecer como pendingMigration.
+            if (!blob || blob.size <= 0) throw new Error("Blob legado vazio (base64 sintaticamente válida, sem conteúdo)");
+            const record = {
+              id: photoId, vistoriaId: v.id, occurrenceId: oc.id, blob, mimeType: "image/jpeg", size: blob.size,
+              createdAt: oc.updatedAt || v.createdAt || nowIso(), deviceOrigin: oc.deviceOrigin || v.deviceOrigin || getDeviceId(),
+              updatedAt: oc.updatedAt || nowIso(), deletedAt: null
+            };
+            photosToPut.push({ store: "photos", key: undefined, value: record });
+            photoValidations.push({ photoId, expectedSize: blob.size, oc, idx: null, singular: true });
+            vistoriaChanged = true;
+          } catch (err) {
+            console.error(`Aviso: falha ao migrar foto legada (formato singular pré-v2.14) da ocorrência ${oc.id} — mantida como está:`, err);
+          }
+          return;
+        }
+        if (!Array.isArray(oc.fotos)) return;
         for (let idx = 0; idx < oc.fotos.length; idx++) {
           const foto = oc.fotos[idx];
           if (typeof foto === "string" && foto.startsWith("data:image")) {
-            const photoId = await deterministicPhotoIdFromBase64(foto, oc.id, idx);
-            const blob = base64ToBlob(foto);
-            const record = {
-              id: photoId,
-              vistoriaId: v.id,
-              occurrenceId: oc.id,
-              blob: blob,
-              mimeType: "image/jpeg",
-              size: blob.size,
-              createdAt: oc.updatedAt || v.createdAt || nowIso(),
-              deviceOrigin: oc.deviceOrigin || v.deviceOrigin || getDeviceId(),
-              updatedAt: oc.updatedAt || nowIso(),
-              deletedAt: null
-            };
-            photosToPut.push({ store: "photos", key: undefined, value: record });
-            photoValidations.push({ photoId, expectedSize: blob.size, oc, idx });
-            vistoriaChanged = true;
+            // Isola erro POR FOTO — uma base64 corrompida não pode abortar a migração das demais fotos
+            // desta ocorrência, de outras ocorrências, ou de outras vistorias no mesmo ciclo. A foto que
+            // falhar aqui simplesmente permanece em base64 (fica visível como "pendingMigration" em
+            // checkPhotoIntegrity), sem travar o resto do lote.
+            try {
+              const photoId = await deterministicPhotoIdFromBase64(foto, oc.id, idx);
+              const blob = base64ToBlob(foto);
+              // T14: ver comentário equivalente acima.
+              if (!blob || blob.size <= 0) throw new Error("Blob legado vazio (base64 sintaticamente válida, sem conteúdo)");
+              const record = {
+                id: photoId,
+                vistoriaId: v.id,
+                occurrenceId: oc.id,
+                blob: blob,
+                mimeType: "image/jpeg",
+                size: blob.size,
+                createdAt: oc.updatedAt || v.createdAt || nowIso(),
+                deviceOrigin: oc.deviceOrigin || v.deviceOrigin || getDeviceId(),
+                updatedAt: oc.updatedAt || nowIso(),
+                deletedAt: null
+              };
+              photosToPut.push({ store: "photos", key: undefined, value: record });
+              photoValidations.push({ photoId, expectedSize: blob.size, oc, idx });
+              vistoriaChanged = true;
+            } catch (err) {
+              console.error(`Aviso: falha ao migrar 1 foto da ocorrência ${oc.id} (base64 corrompida) — mantida como está, demais fotos seguem normalmente:`, err);
+            }
           }
         }
       };
@@ -1709,9 +1951,10 @@ async function migrateLegacyBase64ToPhotos() {
         // 3. Atualiza a vistoria somente após validação 100%
         if (allValid) {
           for (const val of photoValidations) {
-            val.oc.fotos[val.idx] = val.photoId;
+            if (val.singular) { val.oc.fotos = [val.photoId]; delete val.oc.foto; }
+            else val.oc.fotos[val.idx] = val.photoId;
           }
-          await idbSet("vistorias", v.id, compactVistoriaForStorage(v));
+          await idbSet("vistorias", undefined, compactVistoriaForStorage(v));
         }
       }
     }
@@ -2012,6 +2255,11 @@ async function resumeVistoria(v) {
     if (m) { await saveVistoriaNow(); return go("montante",v.id,e.id,m.id); }
   }
   if (r.mode === "prumo") {
+    if (!podeEntrarNoPrumo(state.draftVistoria)) {
+      delete state.draftVistoria.resume;
+      await saveVistoriaNow();
+      return go("vistoria", v.id);
+    }
     let m=(e.montantes||[]).find((x)=>x.id===r.montanteId) || (e.montantes||[]).find((x)=>!prumoDone(x));
     if (m) return go("prumo",v.id,e.id,m.id);
   }
@@ -2020,6 +2268,7 @@ async function resumeVistoria(v) {
 }
 function ResumeCard(v) {
   const r=v.resume || {};
+  if (r.mode === "prumo" && !podeEntrarNoPrumo(v)) return null;
   const e=(v.estruturas||[]).find((x)=>x.id===r.estruturaId);
   if (!e) return null;
   const m=(e.montantes||[]).find((x)=>x.id===r.montanteId);
@@ -2124,7 +2373,25 @@ function VistoriaRow(v, isDraft) {
 
 /* ---------------- Inspeção (Loja/CD + lista de Estruturas) ---------------- */
 function newVistoriaSkeleton() {
-  return { id: uid(), lojaCd: "", local: "", data: todayStr(), inspetor: "", createdAt: new Date().toISOString(), finalizada: false, estruturas: [] };
+  return {
+    id: uid(),
+    lojaCd: "",
+    local: "",
+    data: todayStr(),
+    inspetor: "",
+    createdAt: new Date().toISOString(),
+    finalizada: false,
+    estruturas: [],
+    workflowConfig: {
+      prumoHabilitado: null,
+      prumoMotivo: "",
+      luxHabilitado: null,
+      luxMotivo: "",
+      luxMetodo: null
+    },
+    configUpdatedAt: nowIso(),
+    configDeviceOrigin: getDeviceId()
+  };
 }
 function newOcorrencia(status = "problema") {
   return { id: uid(), status, montanteRef: "", descTxt: "", tipoTxt: "", localTxt: "", grauTxt: "", corte: "", qtd: 1, correcao: "", obs: "", fotos: [], valor: "" };
@@ -2146,6 +2413,7 @@ function newEstruturaSkeleton(previous = null) {
     setor: previous ? previous.setor || "" : "", tipoEstrutura: previous ? previous.tipoEstrutura || "" : "",
     rua: previous ? previous.rua || "" : "", lado: previous ? previous.lado || "" : "", modulos: "",
     fabricante: previous ? previous.fabricante || "" : "", observacoesGerais: "", finalizada: false, visualFinalizada: false, prumoFinalizada: false, luxFinalizada: false, resolvido: false,
+    luxNaoAplica: false,
     montantes: [], itensEstrutura: itensEstruturaCatalogo(state.config).map(newEstruturaItemRuntime),
   };
 }
@@ -2269,15 +2537,154 @@ function VistoriaScreen() {
   header.appendChild(el("div", { id: "save-indicator", class: "save-indicator" }, "✓ Salvo no aparelho"));
   inner.appendChild(header);
 
+  // Workflow Config Card (quando v.workflowConfig está presente)
+  if (v.workflowConfig) {
+    const wfCard = Card({ class: "workflow-config-card", style: "margin-bottom:14px;border-left:4px solid var(--primary);padding:14px" });
+    const head = el("div", { style: "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px" },
+      el("div", {},
+        el("div", { class: "overview-kicker", style: "color:var(--primary);font-weight:700" }, "CAMPANHAS DA INSPEÇÃO"),
+        el("div", { style: "font-size:15px;font-weight:700" }, "Definição de Escopo de Trabalho")
+      )
+    );
+    wfCard.appendChild(head);
+
+    // 1. Visual
+    const visRow = el("div", { style: "display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-light, #eee)" },
+      el("div", {}, el("strong", {}, "1 · Inspeção Visual"), el("div", { style: "font-size:12px;color:var(--ink-soft)" }, "Checklist geral de estruturas e montantes")),
+      Tag("ok", "sm", "Obrigatória")
+    );
+    wfCard.appendChild(visRow);
+
+    // 2. Prumo
+    const prumoSection = el("div", { style: "padding:10px 0;border-bottom:1px solid var(--border-light, #eee)" });
+    const prumoTop = el("div", { style: "display:flex;justify-content:space-between;align-items:center;gap:8px" },
+      el("div", {}, el("strong", {}, "2 · Prumo a Laser"), el("div", { style: "font-size:12px;color:var(--ink-soft)" }, "Desvios longitudinal e transversal")),
+      el("div", { style: "display:flex;gap:6px" },
+        (() => {
+          const btnSim = el("button", { class: `ghost-btn touch-btn ${v.workflowConfig.prumoHabilitado === true ? "active-choice" : ""}`, style: v.workflowConfig.prumoHabilitado === true ? "background:var(--primary);color:#fff;font-weight:700" : "" }, "Realizar");
+          btnSim.addEventListener("click", async () => {
+            v.workflowConfig.prumoHabilitado = true;
+            touchWorkflowConfig(v);
+            await saveVistoriaNow();
+            render();
+          });
+          const btnNao = el("button", { class: `ghost-btn touch-btn ${v.workflowConfig.prumoHabilitado === false ? "active-choice" : ""}`, style: v.workflowConfig.prumoHabilitado === false ? "background:var(--amber, #d97706);color:#fff;font-weight:700" : "" }, "Não realizar");
+          btnNao.addEventListener("click", async () => {
+            v.workflowConfig.prumoHabilitado = false;
+            if (v.resume && v.resume.mode === "prumo") {
+              delete v.resume;
+            }
+            touchWorkflowConfig(v);
+            await saveVistoriaNow();
+            render();
+          });
+          return el("div", { style: "display:flex;gap:4px" }, btnSim, btnNao);
+        })()
+      )
+    );
+    prumoSection.appendChild(prumoTop);
+    if (v.workflowConfig.prumoHabilitado === false) {
+      const mot = inputEl(v.workflowConfig.prumoMotivo || "", (val) => {
+        v.workflowConfig.prumoMotivo = val;
+        touchWorkflowConfig(v);
+        saveVistoriaDebounced();
+      }, "Ex: Fora de escopo contratual / sem autorização para laser");
+      prumoSection.appendChild(el("div", { style: "margin-top:8px" }, Field("Motivo para não realizar o Prumo (obrigatório)", mot)));
+    }
+    wfCard.appendChild(prumoSection);
+
+    // 3. Lux
+    const luxSection = el("div", { style: "padding:10px 0" });
+    const luxTop = el("div", { style: "display:flex;justify-content:space-between;align-items:center;gap:8px" },
+      el("div", {}, el("strong", {}, "3 · Iluminação / Lux"), el("div", { style: "font-size:12px;color:var(--ink-soft)" }, "Nível de iluminamento nos corredores")),
+      el("div", { style: "display:flex;gap:6px" },
+        (() => {
+          const btnSim = el("button", { class: `ghost-btn touch-btn ${v.workflowConfig.luxHabilitado === true ? "active-choice" : ""}`, style: v.workflowConfig.luxHabilitado === true ? "background:var(--primary);color:#fff;font-weight:700" : "" }, "Realizar");
+          btnSim.addEventListener("click", async () => {
+            v.workflowConfig.luxHabilitado = true;
+            touchWorkflowConfig(v);
+            await saveVistoriaNow();
+            render();
+          });
+          const btnNao = el("button", { class: `ghost-btn touch-btn ${v.workflowConfig.luxHabilitado === false ? "active-choice" : ""}`, style: v.workflowConfig.luxHabilitado === false ? "background:var(--amber, #d97706);color:#fff;font-weight:700" : "" }, "Não realizar");
+          btnNao.addEventListener("click", async () => {
+            v.workflowConfig.luxHabilitado = false;
+            touchWorkflowConfig(v);
+            await saveVistoriaNow();
+            render();
+          });
+          return el("div", { style: "display:flex;gap:4px" }, btnSim, btnNao);
+        })()
+      )
+    );
+    luxSection.appendChild(luxTop);
+
+    if (v.workflowConfig.luxHabilitado === false) {
+      const mot = inputEl(v.workflowConfig.luxMotivo || "", (val) => {
+        v.workflowConfig.luxMotivo = val;
+        touchWorkflowConfig(v);
+        saveVistoriaDebounced();
+      }, "Ex: Galpão sem iluminação / avaliação dispensada pelo cliente");
+      luxSection.appendChild(el("div", { style: "margin-top:8px" }, Field("Motivo para não realizar a Iluminação (obrigatório)", mot)));
+    } else if (v.workflowConfig.luxHabilitado === true) {
+      const temDados = luxTemDados(v);
+      const selMetodo = el("div", { style: "margin-top:10px;background:var(--bg-subtle, #f5f7fa);padding:10px;border-radius:6px" });
+      selMetodo.appendChild(el("div", { style: "font-size:12.5px;font-weight:700;margin-bottom:6px" }, "Método de Aferição de Lux:"));
+
+      const radA = el("button", { class: `ghost-btn touch-btn ${v.workflowConfig.luxMetodo === "A" ? "active-choice" : ""}`, style: `margin-right:6px;margin-bottom:6px;${v.workflowConfig.luxMetodo === "A" ? "background:var(--primary);color:#fff;font-weight:700" : ""}` }, "Método A (Início, Meio e Final)");
+      radA.disabled = temDados && v.workflowConfig.luxMetodo !== "A";
+      radA.addEventListener("click", async () => {
+        if (temDados && v.workflowConfig.luxMetodo !== "A") return;
+        v.workflowConfig.luxMetodo = "A";
+        touchWorkflowConfig(v);
+        await saveVistoriaNow();
+        render();
+      });
+
+      const radB = el("button", { class: `ghost-btn touch-btn ${v.workflowConfig.luxMetodo === "B" ? "active-choice" : ""}`, style: `${v.workflowConfig.luxMetodo === "B" ? "background:var(--primary);color:#fff;font-weight:700" : ""}` }, "Método B (1 por Montante)");
+      radB.disabled = temDados && v.workflowConfig.luxMetodo !== "B";
+      radB.addEventListener("click", async () => {
+        if (temDados && v.workflowConfig.luxMetodo !== "B") return;
+        v.workflowConfig.luxMetodo = "B";
+        touchWorkflowConfig(v);
+        await saveVistoriaNow();
+        render();
+      });
+
+      selMetodo.appendChild(el("div", { style: "display:flex;flex-wrap:wrap" }, radA, radB));
+      if (temDados) {
+        selMetodo.appendChild(el("div", { style: "font-size:11.5px;color:var(--ink-faint);margin-top:4px" }, "🔒 O método não pode ser alterado pois já existem medições ou registros operacionais salvos."));
+      } else if (!v.workflowConfig.luxMetodo) {
+        selMetodo.appendChild(el("div", { style: "font-size:11.5px;color:var(--amber-dark, #b45309);margin-top:4px" }, "⚠ Escolha o Método A ou B antes de iniciar as medições de Lux."));
+      }
+      luxSection.appendChild(selMetodo);
+    }
+    wfCard.appendChild(luxSection);
+    inner.appendChild(wfCard);
+  }
+
   const sum=inspectionStageSummary(v);
   const visualStructures=(v.estruturas||[]).filter((e)=>visualProgress(e).complete).length;
-  const prumoStructures=(v.estruturas||[]).filter((e)=>prumoProgress(e).complete).length;
-  const luxStructures=(v.estruturas||[]).filter((e)=>luxProgress(e).complete).length;
+  const prumoStructures=(v.estruturas||[]).filter((e)=>prumoProgress(e, v).complete).length;
+  const luxStructures=(v.estruturas||[]).filter((e)=>luxProgress(e, v).complete).length;
   const overview=Card({class:"inspection-stage-overview",style:"margin-bottom:14px"});
   overview.appendChild(el("div",{class:"overview-head"},el("div",{},el("div",{class:"overview-kicker"},"ANDAMENTO DA INSPEÇÃO"),el("div",{class:"overview-title"},`${sum.estruturas} estrutura${sum.estruturas===1?"":"s"} · ${sum.montantes} montantes conhecidos`))));
   const stageMini=el("div",{class:"stage-mini-grid"});
-  [["Visual",visualStructures,sum.estruturas],["Prumo",prumoStructures,sum.estruturas],["Lux",luxStructures,sum.estruturas]].forEach(([label,done,total])=>stageMini.appendChild(el("div",{class:"stage-mini"},el("strong",{},`${done}/${total||0}`),el("span",{},label))));overview.appendChild(stageMini);
-  if(v.resume&&v.resume.estruturaId){const b=el("button",{class:"overview-resume-btn"},"▶ Continuar de onde parei");b.addEventListener("click",()=>resumeVistoria(v));overview.appendChild(b);}
+  const prumoLabelMini = isPrumoHabilitado(v) ? `${prumoStructures}/${sum.estruturas||0}` : "N/A";
+  const luxLabelMini = isLuxHabilitado(v) ? `${luxStructures}/${sum.estruturas||0}` : "N/A";
+  [["Visual", `${visualStructures}/${sum.estruturas||0}`], ["Prumo", prumoLabelMini], ["Lux", luxLabelMini]].forEach(([label, countStr]) => {
+    stageMini.appendChild(el("div", { class: "stage-mini" }, el("strong", {}, countStr), el("span", {}, label)));
+  });
+  overview.appendChild(stageMini);
+  if(v.resume&&v.resume.estruturaId){
+    if (v.resume.mode === "prumo" && !podeEntrarNoPrumo(v)) {
+      delete v.resume;
+    } else {
+      const b=el("button",{class:"overview-resume-btn"},"▶ Continuar de onde parei");
+      b.addEventListener("click",()=>resumeVistoria(v));
+      overview.appendChild(b);
+    }
+  }
   inner.appendChild(overview);
 
   // v2.17: o trabalho é escolhido no nível da loja, refletindo a sequência física real.
@@ -2293,12 +2700,25 @@ function VistoriaScreen() {
     if(!e.setupComplete) return go("estrutura",v.id,e.id);
     const m=startFirstVisualMontante(v,e); await saveVistoriaNow(); go("montante",v.id,e.id,m.id);
   };
-  const nextPrumo=(v.estruturas||[]).find((e)=>e.setupComplete&&e.visualFinalizada&&!prumoProgress(e).complete);
-  const nextLux=(v.estruturas||[]).find((e)=>e.setupComplete&&e.visualFinalizada&&!luxProgress(e).complete);
+  const nextPrumo = podeEntrarNoPrumo(v) ? (v.estruturas||[]).find((e)=>e.setupComplete&&e.visualFinalizada&&!prumoProgress(e, v).complete) : null;
+  const nextLux = isLuxHabilitado(v) && getLuxMetodo(v) !== null ? (v.estruturas||[]).find((e)=>e.setupComplete&&e.visualFinalizada&&!luxProgress(e, v).complete) : null;
+
+  const prumoPendenteDecisao = Boolean(v.workflowConfig && v.workflowConfig.prumoHabilitado === null);
+  const prumoMain = !isPrumoHabilitado(v) ? "Campanha não realizada" : (prumoPendenteDecisao ? "Decisão pendente" : `${prumoStructures}/${sum.estruturas||0} estruturas`);
+  const prumoSub = !isPrumoHabilitado(v) ? (v.workflowConfig && v.workflowConfig.prumoMotivo ? "Motivo: " + v.workflowConfig.prumoMotivo : "Desabilitado na inspeção") : (prumoPendenteDecisao ? "Escolha Realizar ou Não realizar nas Campanhas acima" : "Use depois da passagem visual, com o laser.");
+  const prumoLabel = !isPrumoHabilitado(v) ? "Não aplicável" : (prumoPendenteDecisao ? "Definir campanha" : (nextPrumo ? "▶ Continuar prumo" : "Prumo em dia"));
+  const prumoDisabled = !podeEntrarNoPrumo(v) || !nextPrumo;
+
+  const luxMet = getLuxMetodo(v);
+  const luxMain = !isLuxHabilitado(v) ? "Campanha não realizada" : (luxMet === null ? "Método não definido" : `${luxStructures}/${sum.estruturas||0} estruturas`);
+  const luxSub = !isLuxHabilitado(v) ? (v.workflowConfig && v.workflowConfig.luxMotivo ? "Motivo: " + v.workflowConfig.luxMotivo : "Desabilitado na inspeção") : (luxMet === null ? "Defina Método A ou B nas Campanhas acima" : (luxMet === "A" ? "Método A: 3 pontos por estrutura" : (luxMet === "B" ? "Método B: 1 por montante" : "Registre os pontos em passagem própria.")));
+  const luxLabel = !isLuxHabilitado(v) ? "Não aplicável" : (luxMet === null ? "Definir método" : (nextLux ? "▶ Continuar Lux" : "Lux em dia"));
+  const luxDisabled = !isLuxHabilitado(v) || luxMet === null || !nextLux;
+
   const makeWork=(kind,title,main,sub,label,handler,disabled=false)=>{const c=Card({class:`inspection-work-card ${kind}${disabled?" disabled":""}`});c.appendChild(el("div",{class:"inspection-work-title"},title));c.appendChild(el("div",{class:"inspection-work-main"},main));c.appendChild(el("div",{class:"inspection-work-sub"},sub));const b=el("button",{class:"inspection-work-btn"},label);b.disabled=disabled;b.addEventListener("click",()=>{if(!disabled)handler();});c.appendChild(b);return c;};
   work.appendChild(makeWork("visual","1 · INSPEÇÃO VISUAL",`${visualStructures}/${sum.estruturas||0} estruturas concluídas`,"Cadastre as estruturas conforme avança. O total só é conhecido no fim.",visualStructures&&visualStructures===sum.estruturas?"＋ Nova estrutura / continuar visual":"▶ Continuar visual",openVisual));
-  work.appendChild(makeWork("prumo","2 · PRUMO",`${prumoStructures}/${sum.estruturas||0} estruturas`,"Use depois da passagem visual, com o laser.",nextPrumo?"▶ Continuar prumo":"Prumo em dia",async()=>{let m=(nextPrumo.montantes||[]).find((x)=>!prumoDone(x))||(nextPrumo.montantes||[])[0];if(m){setResume(v,"prumo",nextPrumo,m);await saveVistoriaNow();go("prumo",v.id,nextPrumo.id,m.id);}},!nextPrumo));
-  work.appendChild(makeWork("lux","3 · ILUMINAÇÃO / LUX",`${luxStructures}/${sum.estruturas||0} estruturas`,"Registre os pontos de medição em uma passagem própria.",nextLux?"▶ Continuar Lux":"Lux em dia",async()=>{setResume(v,"lux",nextLux);await saveVistoriaNow();go("lux",v.id,nextLux.id);},!nextLux));
+  work.appendChild(makeWork("prumo","2 · PRUMO", prumoMain, prumoSub, prumoLabel, async()=>{ if(!podeEntrarNoPrumo(v)) { if(prumoPendenteDecisao) alert("Defina a campanha de Prumo (Realizar ou Não realizar) na seção Campanhas acima."); return; } let m=(nextPrumo.montantes||[]).find((x)=>!prumoDone(x))||(nextPrumo.montantes||[])[0];if(m){setResume(v,"prumo",nextPrumo,m);await saveVistoriaNow();go("prumo",v.id,nextPrumo.id,m.id);}}, prumoDisabled));
+  work.appendChild(makeWork("lux","3 · ILUMINAÇÃO / LUX", luxMain, luxSub, luxLabel, async()=>{ if(!isLuxHabilitado(v)) return; if(luxMet === null){ alert("Defina o Método A ou B na seção Campanhas antes de iniciar o Lux."); return; } setResume(v,"lux",nextLux);await saveVistoriaNow();go("lux",v.id,nextLux.id);}, luxDisabled));
   inner.appendChild(work);
 
   const estHead = el("div", { style: "display:flex;align-items:center;justify-content:space-between;margin-bottom:8px" },
@@ -2340,8 +2760,10 @@ function VistoriaScreen() {
   return wrap;
 }
 function EstruturaRow(e, v) {
-  const st=estruturaStatus(e);const nMont=(e.montantes||[]).length;const vp=visualProgress(e),pp=prumoProgress(e),lp=luxProgress(e);
-  const steps=[vp.complete?"Visual ✓":`Visual ${vp.done}/${vp.total}`,pp.complete?"Prumo ✓":`Prumo ${pp.done}/${pp.total}`,lp.complete?"Lux ✓":(lp.measurements?`Lux ${lp.measurements} med.`:"Lux —")];
+  const st=estruturaStatus(e);const nMont=(e.montantes||[]).length;const vp=visualProgress(e),pp=prumoProgress(e, v),lp=luxProgress(e, v);
+  const prumoStep = !isPrumoHabilitado(v) ? "Prumo (N/A)" : (pp.complete ? "Prumo ✓" : `Prumo ${pp.done}/${pp.total}`);
+  const luxStep = !isLuxHabilitado(v) ? "Lux (N/A)" : (e.luxNaoAplica ? "Lux (Sem ilum.)" : (lp.complete ? "Lux ✓" : (lp.measurements ? `Lux ${lp.measurements} med.` : "Lux —")));
+  const steps=[vp.complete?"Visual ✓":`Visual ${vp.done}/${vp.total}`, prumoStep, luxStep];
   const row=el("div",{class:"insp-row",onclick:()=>go("estrutura",v.id,e.id)},
     el("div",{},el("div",{class:"insp-code"},e.codigo||"(sem código ainda)"),el("div",{class:"insp-sub"},[e.rua&&"Rua "+e.rua,e.lado&&"Lado "+e.lado,nMont+" montante"+(nMont===1?"":"s")].filter(Boolean).join(" · ")),el("div",{class:"stage-inline"},steps.join("  ·  "))),
     el("div",{style:"display:flex;align-items:center;gap:8px"},Tag(st,"sm"),(()=>{const b=el("button",{style:"background:none;border:none;color:var(--ink-faint)",html:svg("trash",15)});b.addEventListener("click",(ev)=>{ev.stopPropagation();if(confirm("Remover esta estrutura da vistoria?")){recordTombstone(v,"estruturas",e.id);v.estruturas=v.estruturas.filter((x)=>x.id!==e.id);saveVistoriaNow().then(render);}});return b;})()));
@@ -2357,12 +2779,27 @@ function submitVistoria(v, errBox) {
   if (semCodigo) return showErr("Toda estrutura precisa de um código — falta preencher pelo menos uma.");
   const semMontante = v.estruturas.find((e) => !(e.montantes || []).length);
   if (semMontante) return showErr(`A estrutura ${semMontante.codigo || "sem código"} ainda não possui montantes inspecionados.`);
+
+  if (v.workflowConfig) {
+    if (v.workflowConfig.prumoHabilitado === null) return showErr("Defina na seção Campanhas se a campanha de Prumo será realizada.");
+    if (v.workflowConfig.prumoHabilitado === false && !String(v.workflowConfig.prumoMotivo || "").trim()) return showErr("Informe o motivo de não realizar o Prumo.");
+    if (v.workflowConfig.luxHabilitado === null) return showErr("Defina na seção Campanhas se a campanha de Iluminação / Lux será realizada.");
+    if (v.workflowConfig.luxHabilitado === false && !String(v.workflowConfig.luxMotivo || "").trim()) return showErr("Informe o motivo de não realizar a Iluminação / Lux.");
+    if (v.workflowConfig.luxHabilitado === true && !v.workflowConfig.luxMetodo) return showErr("Selecione o Método A ou Método B de Iluminação / Lux antes de concluir a inspeção.");
+  }
+
   const visualAberta = v.estruturas.find((e)=>!visualProgress(e).complete);
   if (visualAberta) return showErr(`A inspeção visual da estrutura ${visualAberta.codigo || "—"} ainda não foi encerrada.`);
-  const prumoPendente = v.estruturas.find((e)=>!prumoProgress(e).complete);
-  if (prumoPendente) { const p=prumoProgress(prumoPendente); return showErr(`Prumo pendente na estrutura ${prumoPendente.codigo || "—"}: ${p.done}/${p.total} montantes concluídos.`); }
-  const luxPendente = v.estruturas.find((e)=>!luxProgress(e).complete);
-  if (luxPendente) return showErr(`A etapa de iluminação/Lux da estrutura ${luxPendente.codigo || "—"} ainda não foi finalizada.`);
+
+  if (isPrumoHabilitado(v)) {
+    const prumoPendente = v.estruturas.find((e)=>!prumoProgress(e, v).complete);
+    if (prumoPendente) { const p=prumoProgress(prumoPendente, v); return showErr(`Prumo pendente na estrutura ${prumoPendente.codigo || "—"}: ${p.done}/${p.total} montantes concluídos.`); }
+  }
+
+  if (isLuxHabilitado(v)) {
+    const luxPendente = v.estruturas.find((e)=>!luxProgress(e, v).complete);
+    if (luxPendente) return showErr(`A etapa de iluminação/Lux da estrutura ${luxPendente.codigo || "—"} ainda não foi finalizada.`);
+  }
   v.finalizada = true;
   v.finalizadaAt = new Date().toISOString();
   v.finalizadaUpdatedAt = nowIso(); v.finalizadaDeviceOrigin = getDeviceId();
@@ -2403,7 +2840,7 @@ function EstruturaSetupScreen(v, e) {
   if(previous){wrap.appendChild(el("div",{class:"setup-inherited-note"},"Dados sugeridos com base em ",el("strong",{},previous.codigo||"estrutura anterior"),". Você pode alterar qualquer campo."));}
   const err=el("div",{class:"setup-error"});wrap.appendChild(err);
   const startBtn=el("button",{class:"setup-start-btn"},"CRIAR E INICIAR INSPEÇÃO →");startBtn.addEventListener("click",async()=>{err.textContent="";if(!String(e.codigo||"").trim()){err.textContent="Informe o código da estrutura.";code.focus();return;}e.setupComplete=true;let m=(e.montantes||[])[0]||addNextMontante(e);setResume(v,"visual",e,m);if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();await saveVistoriaNow();go("montante",v.id,e.id,m.id);});wrap.appendChild(startBtn);
-  const cancel=el("button",{class:"setup-cancel-btn"},"Cancelar nova estrutura");cancel.addEventListener("click",async()=>{if((e.montantes||[]).length||montanteProblemEntries(e).length)return go("vistoria",v.id);if(!confirm("Cancelar e remover esta nova estrutura?"))return;recordTombstone(v,"estruturas",e.id);v.estruturas=(v.estruturas||[]).filter((x)=>x.id!==e.id);await saveVistoriaNow();go("vistoria",v.id);});wrap.appendChild(cancel);
+  const cancel=el("button",{class:"setup-cancel-btn"},"Cancelar nova estrutura");cancel.addEventListener("click",async()=>{if((e.montantes||[]).length||montanteAnomalyEntries(e).length||estruturaAnomalyOccurrences(e).length)return go("vistoria",v.id);if(!confirm("Cancelar e remover esta nova estrutura?"))return;recordTombstone(v,"estruturas",e.id);v.estruturas=(v.estruturas||[]).filter((x)=>x.id!==e.id);await saveVistoriaNow();go("vistoria",v.id);});wrap.appendChild(cancel);
   return wrap;
 }
 function EstruturaScreen() {
@@ -2414,7 +2851,7 @@ function EstruturaScreen() {
   if(!e.setupComplete)return EstruturaSetupScreen(v,e);
 
   const wrap=el("div",{style:"padding-bottom:86px"});const inner=el("div",{class:"screen structure-screen",style:"padding-top:14px"});wrap.appendChild(inner);
-  const totalAnom=montanteProblemEntries(e).length+estruturaProblemOccurrences(e).length;const vp=visualProgress(e),pp=prumoProgress(e),lp=luxProgress(e);
+  const totalAnom=montanteAnomalyEntries(e).length+estruturaAnomalyOccurrences(e).length;const vp=visualProgress(e),pp=prumoProgress(e),lp=luxProgress(e);
   const summary=Card({class:"structure-summary",style:"margin-bottom:10px"});summary.appendChild(el("div",{class:"structure-summary-row"},el("div",{},el("div",{class:"structure-code"},e.codigo||"Estrutura"),el("div",{class:"structure-sub"},[e.rua&&`Rua ${e.rua}`,e.lado,e.setor,e.tipoEstrutura,e.fabricante].filter(Boolean).join(" · "))),el("div",{class:"structure-anom"},el("strong",{},String(totalAnom)),el("span",{},"anom."))));
   const details=el("details",{class:"structure-details"});details.appendChild(el("summary",{},"Editar dados da estrutura"));const edit=el("div",{class:"structure-edit-body"});edit.appendChild(Field("Código",inputEl(e.codigo,(val)=>{e.codigo=val;touchMeta(e);saveVistoriaDebounced();},"Código")));edit.appendChild(el("div",{class:"row2"},choiceOrCustomField("Setor",e.setor,state.config.setores,(val)=>{e.setor=val;touchMeta(e);saveVistoriaDebounced();}),choiceOrCustomField("Tipo",e.tipoEstrutura,state.config.tiposEstrutura,(val)=>{e.tipoEstrutura=val;touchMeta(e);saveVistoriaDebounced();})));edit.appendChild(el("div",{class:"row2"},Field("Rua",inputEl(e.rua,(val)=>{e.rua=val;touchMeta(e);saveVistoriaDebounced();},"Rua")),choiceOrCustomField("Lado",e.lado,["DIREITO","ESQUERDO","AMBOS","ÍMPAR","PAR"],(val)=>{e.lado=val;touchMeta(e);saveVistoriaDebounced();})));edit.appendChild(choiceOrCustomField("Fabricante",e.fabricante,state.config.fabricantes,(val)=>{e.fabricante=val;touchMeta(e);saveVistoriaDebounced();}));const obs=el("textarea",{class:"input",rows:2,placeholder:"Observações gerais"});obs.value=e.observacoesGerais||"";obs.addEventListener("input",()=>{e.observacoesGerais=obs.value;touchMeta(e);saveVistoriaDebounced();});edit.appendChild(Field("Observações",obs));edit.appendChild(el("div",{id:"save-indicator",class:"save-indicator"},"✓ Salvo no aparelho"));details.appendChild(edit);summary.appendChild(details);inner.appendChild(summary);
 
@@ -2423,7 +2860,25 @@ function EstruturaScreen() {
   } else {
     const done=Card({class:"visual-done-card"});done.appendChild(el("div",{class:"visual-done-icon"},"✓"));done.appendChild(el("div",{},el("div",{class:"visual-done-title"},"Inspeção visual concluída"),el("div",{class:"visual-done-sub"},`${vp.total} montantes · ${totalAnom} anomalia${totalAnom===1?"":"s"}`)));inner.appendChild(done);
     const next=el("button",{class:"next-structure-btn"},"＋ CRIAR PRÓXIMA ESTRUTURA");next.addEventListener("click",async()=>{const nova=newEstruturaSkeleton(e);v.estruturas.push(nova);await saveVistoriaNow();go("estrutura",v.id,nova.id);});inner.appendChild(next);
-    const measures=el("div",{class:"structure-measure-row"});const pb=el("button",{class:"ghost-btn touch-btn"},pp.complete?"Prumo ✓":`Prumo ${pp.done}/${pp.total}`);pb.addEventListener("click",async()=>{let m=(e.montantes||[]).find((x)=>!prumoDone(x))||(e.montantes||[])[0];if(m){setResume(v,"prumo",e,m);await saveVistoriaNow();go("prumo",v.id,e.id,m.id);}});const lb=el("button",{class:"ghost-btn touch-btn"},lp.complete?"Lux ✓":lp.measurements?`Lux ${lp.measurements} med.`:"Lux —");lb.addEventListener("click",async()=>{setResume(v,"lux",e);await saveVistoriaNow();go("lux",v.id,e.id);});measures.appendChild(pb);measures.appendChild(lb);inner.appendChild(measures);
+    const measures=el("div",{class:"structure-measure-row"});
+    const prumoBtnText = !isPrumoHabilitado(v) ? "Prumo (N/A)" : (!podeEntrarNoPrumo(v) ? "Prumo (Pendente)" : (pp.complete ? "Prumo ✓" : `Prumo ${pp.done}/${pp.total}`));
+    const pb=el("button",{class:"ghost-btn touch-btn"}, prumoBtnText);
+    pb.addEventListener("click",async()=>{
+      if (!podeEntrarNoPrumo(v)) {
+        return alert(v.workflowConfig && v.workflowConfig.prumoHabilitado === false ? "Campanha de Prumo desabilitada nesta inspeção." : "Defina se a campanha de Prumo será realizada na tela da inspeção antes de iniciar.");
+      }
+      let m=(e.montantes||[]).find((x)=>!prumoDone(x))||(e.montantes||[])[0];
+      if(m){setResume(v,"prumo",e,m);await saveVistoriaNow();go("prumo",v.id,e.id,m.id);}
+    });
+
+    const luxBtnText = !isLuxHabilitado(v) ? "Lux (N/A)" : (e.luxNaoAplica ? "Lux (Sem ilum.)" : (lp.complete ? "Lux ✓" : (lp.measurements ? `Lux ${lp.measurements} med.` : "Lux —")));
+    const lb=el("button",{class:"ghost-btn touch-btn"}, luxBtnText);
+    lb.addEventListener("click",async()=>{
+      if (!isLuxHabilitado(v)) return alert("Campanha de Iluminação/Lux desabilitada nesta inspeção.");
+      if (getLuxMetodo(v) === null) return alert("Defina o Método de Lux (A ou B) na tela da inspeção antes de iniciar.");
+      setResume(v,"lux",e);await saveVistoriaNow();go("lux",v.id,e.id);
+    });
+    measures.appendChild(pb);measures.appendChild(lb);inner.appendChild(measures);
   }
 
   const visEstItems=visualStructureItems(e);if(visEstItems.length){if(!(e.id in estItemsCollapseState))estItemsCollapseState[e.id]=true;const collapsed=estItemsCollapseState[e.id];const estOverall=overallStatus(visEstItems.map((it)=>({status:estruturaEstItemStatus(it)})));const estHeader=el("div",{class:"card section-toggle",style:"margin-top:12px"},el("div",{},el("div",{style:"font-weight:700;font-size:14px"},"Condições gerais da estrutura"),el("div",{class:"insp-sub"},"Layout, luminárias, piso e demais itens gerais")),el("div",{style:"display:flex;align-items:center;gap:8px"},Tag(estOverall,"sm"),el("span",{html:svg("chevronRight",16,collapsed?"":"transform:rotate(90deg)")})));estHeader.addEventListener("click",()=>{estItemsCollapseState[e.id]=!estItemsCollapseState[e.id];render();});inner.appendChild(estHeader);if(!collapsed){const list=el("div",{style:"display:flex;flex-direction:column;gap:8px;margin:8px 0 12px"});visEstItems.forEach((it)=>list.appendChild(EstruturaItemRow(it,e,v)));inner.appendChild(list);}}
@@ -2490,7 +2945,7 @@ function OcorrenciaCard(oc, idx, it, e) {
 }
 function MontanteRow(m, e, v) {
   const st=visualMontanteStatus(m,e);
-  const nAnom=montanteProblemEntries({ ...e, montantes:[m] }).filter(({item})=>item.id!=="prumo").length;
+  const nAnom=montanteAnomalyEntries({ ...e, montantes:[m] }).filter(({item})=>item.id!=="prumo").length;
   const row=el("div",{class:"insp-row",onclick:()=>{setResume(v,"visual",e,m);saveVistoriaNow().then(()=>go("montante",v.id,e.id,m.id));}},
     el("div",{},el("div",{class:"insp-code"},`Montante Nº ${m.numero}`),el("div",{class:"insp-sub"},[m.tipoMontante,m.fabricante,nAnom?`${nAnom} anomalia(s)`:""].filter(Boolean).join(" · "))),
     el("div",{style:"display:flex;align-items:center;gap:8px"},Tag(st,"sm"),el("span",{html:svg("chevronRight",16),style:"color:var(--ink-faint)"})));
@@ -2576,7 +3031,7 @@ function NewAnomalyScreen() {
 function MontanteScreen() {
   const wrap=el("div",{class:"field-screen visual-field-screen",style:"padding-bottom:92px"});const inner=el("div",{class:"screen",style:"padding-top:10px"});wrap.appendChild(inner);
   const v=state.draftVistoria;const e=v&&(v.estruturas||[]).find((x)=>x.id===state.activeEstruturaId);const m=e&&(e.montantes||[]).find((x)=>x.id===state.activeMontanteId);if(!v||!e||!m){inner.appendChild(el("div",{class:"empty"},"Montante não encontrado."));return wrap;}
-  (m.itens||[]).forEach(normalizeMontanteItem);setResume(v,"visual",e,m);const visualItems=visualItemsMontante(m,e);const anom=montanteProblemEntries({...e,montantes:[m]}).filter(({item})=>item.id!=="prumo").length;const done=visualMontanteDone(m,e);const ord=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero);const idx=ord.findIndex((x)=>x.id===m.id);const prev=ord[idx-1];const isLast=idx===ord.length-1;
+  (m.itens||[]).forEach(normalizeMontanteItem);setResume(v,"visual",e,m);const visualItems=visualItemsMontante(m,e);const visualAnoms=montanteAnomalyEntries({...e,montantes:[m]}).filter(({item})=>item.id!=="prumo");const anom=visualAnoms.length;const done=visualMontanteDone(m,e);const ord=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero);const idx=ord.findIndex((x)=>x.id===m.id);const prev=ord[idx-1];const isLast=idx===ord.length-1;
   const hero=Card({class:"montante-hero compact"});hero.appendChild(el("div",{class:"montante-context"},`VISUAL · ${e.codigo||"—"}${e.rua?" · Rua "+e.rua:""}${e.lado?" · "+e.lado:""}`));hero.appendChild(el("div",{class:"montante-number"},"MONTANTE ",el("strong",{},String(m.numero).padStart(3,"0"))));hero.appendChild(el("div",{class:"montante-meta"},el("span",{},anom?`${anom} anomalia${anom===1?"":"s"}`:"sem anomalias"),el("span",{},done?"✓ visual concluído":"em revisão"),el("span",{id:"save-indicator",class:"save-indicator"},"✓ salvo")));inner.appendChild(hero);
 
   const context=el("details",{class:"card compact-details",style:"margin-top:8px"});const chips=el("div",{class:"context-chips"},el("span",{class:"context-chip"},m.tipoMontante||"Tipo não informado"),el("span",{class:"context-chip"},m.fabricante||e.fabricante||"Fabricante não informado"));context.appendChild(el("summary",{},chips,el("span",{class:"edit-hint"},"alterar")));const body=el("div",{class:"compact-details-body"});body.appendChild(choiceOrCustomField("Tipo / corte",m.tipoMontante,["GÔNDOLA","CHÃO","LONGARINA MÓVEL","ÚLTIMO MONTANTE"],(val)=>{m.tipoMontante=val;touchMontanteMeta(m,e);saveVistoriaDebounced();},"Digite o tipo"));body.appendChild(choiceOrCustomField("Fabricante",m.fabricante||e.fabricante,state.config.fabricantes,(val)=>{m.fabricante=val;touchMontanteMeta(m,e);saveVistoriaDebounced();},"Digite o fabricante"));const obs=el("textarea",{class:"input",rows:2,placeholder:"Observação deste montante (opcional)"});obs.value=m.observacoes||"";obs.addEventListener("input",()=>{m.observacoes=obs.value;touchMontanteMeta(m,e);saveVistoriaDebounced();});body.appendChild(Field("Observação",obs));context.appendChild(body);inner.appendChild(context);
@@ -2589,7 +3044,7 @@ function MontanteScreen() {
   const renderPicker=()=>{const q=(search.value||"").trim().toLowerCase();results.innerHTML="";if(!q){results.appendChild(el("div",{class:"picker-search-help"},"Digite parte do código ou nome para procurar."));return;}const searchable=[...visualItems.map((it)=>({it,level:"montante"})),...visualStructureItems(e).map((it)=>({it,level:"estrutura"}))];searchable.filter(({it})=>`${it.codigo} ${it.nome} ${it.familia}`.toLowerCase().includes(q)).slice(0,30).forEach(({it,level})=>{const st=level==="montante"?montanteItemStatus(it):estruturaEstItemStatus(it);const b=el("button",{class:"picker-item"},el("span",{},CodeBadge(it.codigo),it.nome,level==="estrutura"?el("small",{style:"display:block;color:var(--ink-faint);margin-top:2px"},"Estrutura / condição geral"):null),Tag(st,"sm"));b.addEventListener("click",()=>{search.blur();if(pickerMode==="anomaly")startNewAnomaly(v,e,m,it,null,level);else if(level==="estrutura")go("estItem",v.id,e.id,null,it.id);else{state.itemDetailReturn="montante";go("itemDetail",v.id,e.id,m.id,null,it.id);}});results.appendChild(b);});};search.addEventListener("input",renderPicker);renderPicker();searchToggle.addEventListener("click",()=>{searchWrap.style.display="block";searchToggle.style.display="none";setTimeout(()=>search.focus(),80);});inner.appendChild(picker);
   const openPicker=(mode)=>{pickerMode=mode;pickerTitle.textContent=mode==="anomaly"?"Selecione o componente com anomalia":"Buscar item do checklist";picker.style.display="block";search.value="";results.innerHTML="";searchWrap.style.display=mode==="detail"?"block":"none";searchToggle.style.display=mode==="detail"?"none":"block";renderPicker();if(mode==="detail")setTimeout(()=>search.focus(),80);};btnAnom.addEventListener("click",()=>openPicker("anomaly"));btnChecklist.addEventListener("click",()=>openPicker("detail"));
 
-  if(anom){const existing=Card({class:"field-existing-anomalies",style:"margin-top:10px"});existing.appendChild(el("div",{class:"picker-title"},`Anomalias registradas neste montante (${anom})`));const seen=new Set();montanteProblemEntries({...e,montantes:[m]}).filter(({item})=>item.id!=="prumo").forEach(({item})=>{if(seen.has(item.id))return;seen.add(item.id);const b=el("button",{class:"picker-item"},el("span",{},CodeBadge(item.codigo),item.nome),el("span",{html:svg("chevronRight",15)}));b.addEventListener("click",()=>{state.itemDetailReturn="montante";go("itemDetail",v.id,e.id,m.id,null,item.id);});existing.appendChild(b);});inner.appendChild(existing);}
+  if(anom){const existing=Card({class:"field-existing-anomalies",style:"margin-top:10px"});existing.appendChild(el("div",{class:"picker-title"},`Anomalias registradas neste montante (${anom})`));const seen=new Set();visualAnoms.forEach(({item})=>{if(seen.has(item.id))return;seen.add(item.id);const b=el("button",{class:"picker-item"},el("span",{},CodeBadge(item.codigo),item.nome),el("span",{html:svg("chevronRight",15)}));b.addEventListener("click",()=>{state.itemDetailReturn="montante";go("itemDetail",v.id,e.id,m.id,null,item.id);});existing.appendChild(b);});inner.appendChild(existing);}
 
   if(isLast&&prev&&!montanteHasInspectionActivity(m)&&!e.visualFinalizada){const recover=el("button",{class:"last-montante-recovery"},"← A ESTRUTURA TERMINOU NO MONTANTE ANTERIOR");recover.addEventListener("click",async()=>{if(!confirm(`Remover o Montante ${m.numero} e finalizar a estrutura ${e.codigo||"—"} no Montante ${prev.numero}?`))return;recordTombstone(v,"montantes",m.id);e.montantes=e.montantes.filter((x)=>x.id!==m.id);completeMontanteVisualAsInspected(prev,e);const faltantes=(e.montantes||[]).filter((x)=>!visualMontanteDone(x,e));if(faltantes.length){alert(`Ainda há ${faltantes.length} montante(s) não concluído(s).`);return;}completeStructureVisualAsInspected(e);e.ultimoMontante=prev.numero;delete v.resume;await saveVistoriaNow();go("estrutura",v.id,e.id);});inner.appendChild(recover);}
 
@@ -2599,7 +3054,15 @@ function MontanteScreen() {
 function PrumoScreen() {
   const wrap=el("div",{class:"field-screen measure-screen",style:"padding-bottom:104px"});const inner=el("div",{class:"screen",style:"padding-top:10px"});wrap.appendChild(inner);
   const v=state.draftVistoria;const e=v&&(v.estruturas||[]).find((x)=>x.id===state.activeEstruturaId);let m=e&&(e.montantes||[]).find((x)=>x.id===state.activeMontanteId);
-  if(!v||!e){inner.appendChild(el("div",{class:"empty"},"Estrutura não encontrada."));return wrap;}if(!e.visualFinalizada){inner.appendChild(el("div",{class:"card empty"},"Finalize primeiro a inspeção visual desta estrutura."));return wrap;}
+  if(!v||!e){inner.appendChild(el("div",{class:"empty"},"Estrutura não encontrada."));return wrap;}
+  if(!podeEntrarNoPrumo(v)){
+    inner.appendChild(el("div",{class:"card empty"},(!v.workflowConfig||v.workflowConfig.prumoHabilitado===null)?"A campanha de Prumo está com decisão pendente. Escolha 'Realizar' na tela da inspeção antes de iniciar.":"A campanha de Prumo está desabilitada para esta inspeção."));
+    const bVoltar=el("button",{class:"submit-btn",style:"margin-top:14px"},"Voltar para a inspeção");
+    bVoltar.addEventListener("click",()=>go("vistoria",v.id));
+    inner.appendChild(bVoltar);
+    return wrap;
+  }
+  if(!e.visualFinalizada){inner.appendChild(el("div",{class:"card empty"},"Finalize primeiro a inspeção visual desta estrutura."));return wrap;}
   const ord=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero);if(!m)m=ord.find((x)=>!prumoDone(x))||ord[0];if(!m){inner.appendChild(el("div",{class:"empty"},"Nenhum montante cadastrado."));return wrap;}
   setResume(v,"prumo",e,m);const idx=ord.findIndex((x)=>x.id===m.id);const prev=ord[idx-1],next=ord[idx+1];const item=prumoItem(m);normalizeMontanteItem(item);const st=montanteItemStatus(item);const resolution=prumoResolution(m);const prog=prumoProgress(e);
   const hero=Card({class:"measure-hero"});hero.appendChild(el("div",{class:"measure-kicker"},`PRUMO · Estrutura ${e.codigo||"—"}`));hero.appendChild(el("div",{class:"measure-number"},"MONTANTE ",el("strong",{},String(m.numero).padStart(3,"0")),el("span",{},` de ${ord.length}`)));hero.appendChild(el("div",{class:"measure-progress"},el("div",{class:"progress-track"},el("div",{class:"progress-fill",style:`width:${ord.length?Math.round(prog.done/ord.length*100):0}%` })),el("span",{},`${prog.done}/${ord.length} concluídos${prog.noAccess?` · ${prog.noAccess} sem acesso`:""}`)));hero.appendChild(el("div",{class:"measure-status"},Tag(resolution.resolved?st:"pendente","sm"),el("span",{id:"save-indicator",class:"save-indicator"},"✓ salvo")));inner.appendChild(hero);
@@ -2616,18 +3079,503 @@ function PrumoScreen() {
 }
 function LuxScreen() {
   const wrap=el("div",{class:"field-screen measure-screen",style:"padding-bottom:30px"});const inner=el("div",{class:"screen",style:"padding-top:10px"});wrap.appendChild(inner);
-  const v=state.draftVistoria;const e=v&&(v.estruturas||[]).find((x)=>x.id===state.activeEstruturaId);if(!v||!e){inner.appendChild(el("div",{class:"empty"},"Estrutura não encontrada."));return wrap;}if(!e.visualFinalizada){inner.appendChild(el("div",{class:"card empty"},"Finalize primeiro a inspeção visual desta estrutura."));return wrap;}
-  const item=iluminacaoItem(e);if(!item){inner.appendChild(el("div",{class:"empty"},"Item 9.45 de iluminação não encontrado no catálogo."));return wrap;}item.ocorrencias=item.ocorrencias||[];setResume(v,"lux",e);
-  const prog=luxProgress(e);const hero=Card({class:"measure-hero lux-hero"});hero.appendChild(el("div",{class:"measure-kicker"},`ILUMINAÇÃO · Estrutura ${e.codigo||"—"}`));hero.appendChild(el("div",{class:"lux-main"},el("strong",{},String(prog.measurements)),el("span",{},prog.measurements===1?"aferição válida":"aferições válidas")));hero.appendChild(el("div",{class:"lux-limit"},`Limite configurado: ≥ ${item.min} ${item.unidade}`));hero.appendChild(el("div",{class:"measure-status"},prog.problems?Tag("problema","sm",`${prog.problems} abaixo`):prog.complete?Tag("ok","sm","Concluída"):Tag("pendente","sm","Em andamento"),el("span",{id:"save-indicator",class:"save-indicator"},"✓ salvo")));inner.appendChild(hero);
-  const list=el("div",{class:"lux-list"});
-  const renderLuxCard=(oc,idx)=>{normalizeOccurrence(oc,item,"pendente");const c=Card({class:"lux-measure-card"});c.appendChild(el("div",{class:"occurrence-head"},el("div",{},el("div",{style:"font-weight:700"},`Aferição ${idx+1}`),Tag(Boolean(String(oc.montanteRef||"").trim())?ocorrenciaStatus(oc,item):"pendente","sm")),(()=>{const b=el("button",{class:"icon-btn",html:svg("trash",15)});b.addEventListener("click",async()=>{if(confirm("Remover esta aferição?")){recordTombstone(v,"ocorrencias",oc.id);item.ocorrencias.splice(idx,1);e.luxFinalizada=false;touchStage(e,"lux");await saveVistoriaNow();render();}});return b;})()));
-    const montanteRefs=(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero).map((m)=>`Montante ${m.numero}`);const refField=choiceOrCustomField("Montante / posição de referência",oc.montanteRef||"",montanteRefs,(val)=>{oc.montanteRef=val;e.luxFinalizada=false;touchOccurrenceFull(oc,item,e);saveVistoriaDebounced();},"Ex: Centro do corredor");refField.classList.add("lux-ref-field");c.appendChild(refField);
-    const inp=inputEl(oc.valor||"",(val)=>{oc.valor=val;oc.status=statusFromMedicao(val,item.min);e.luxFinalizada=false;touchOccurrenceFull(oc,item,e);saveVistoriaDebounced();},`Mínimo ${item.min}`,"number"); inp.classList.add("lux-value-input");c.appendChild(Field(`Valor medido (${item.unidade})`,inp));const st=statusFromMedicao(oc.valor,item.min);const hasRef=Boolean(String(oc.montanteRef||"").trim());c.appendChild(el("div",{class:"measurement-hint"},!hasRef?"Selecione primeiro o montante / posição de referência.":!oc.valor?`Digite o valor medido · mínimo ${item.min} ${item.unidade}`:st==="ok"?`✓ Dentro do limite (≥ ${item.min} ${item.unidade})`:`⚠ Abaixo do limite (${item.min} ${item.unidade})`));
-    const photoWrap=el("div",{style:"margin-top:6px"}); renderPhotoArea(photoWrap,oc,()=>touchOccurrenceFull(oc,item,e)); c.appendChild(photoWrap);
-    return c;};
-  item.ocorrencias.forEach((oc,idx)=>list.appendChild(renderLuxCard(oc,idx)));if(!item.ocorrencias.length)list.appendChild(el("div",{class:"card empty"},"Nenhuma aferição ainda. Registre os pontos definidos pelo técnico para esta estrutura."));inner.appendChild(list);
-  const add=el("button",{class:"measure-add-btn"},"＋ Adicionar aferição");add.addEventListener("click",async()=>{item.ocorrencias.push(touchOccurrence(newOcorrencia("pendente")));e.luxFinalizada=false;touchStage(e,"lux");await saveVistoriaNow();render();setTimeout(()=>{const cards=[...document.querySelectorAll(".lux-measure-card")];const last=cards[cards.length-1];const select=last&&last.querySelector(".lux-ref-field select");if(select)select.focus();},120);});inner.appendChild(add);
-  const finish=el("button",{class:"field-next-btn",style:"margin-top:12px"},e.luxFinalizada?"✓ ETAPA LUX CONCLUÍDA — CONTINUAR":"✓ FINALIZAR LUX DESTA ESTRUTURA");finish.addEventListener("click",async()=>{const p=luxProgress(e);if(!e.luxFinalizada){if(!item.ocorrencias.length)return alert("Registre pelo menos uma aferição antes de finalizar a etapa de Lux.");const noRef=item.ocorrencias.filter((oc)=>!String(oc.montanteRef||"").trim()).length;if(noRef)return alert(`Há ${noRef} aferição(ões) sem montante / posição de referência.`);if(p.pending)return alert(`Há ${p.pending} aferição(ões) sem valor válido.`);e.luxFinalizada=true;e.luxFinalizadaAt=new Date().toISOString();touchStage(e,"lux");}const nextE=nextStageStructure(v,e,"lux");if(nextE){setResume(v,"lux",nextE);await saveVistoriaNow();return go("lux",v.id,nextE.id);}delete v.resume;await saveVistoriaNow();go("vistoria",v.id);});inner.appendChild(finish);return wrap;
+  const v=state.draftVistoria;const e=v&&(v.estruturas||[]).find((x)=>x.id===state.activeEstruturaId);
+  if(!v||!e){inner.appendChild(el("div",{class:"empty"},"Estrutura não encontrada."));return wrap;}
+  if(!e.visualFinalizada){inner.appendChild(el("div",{class:"card empty"},"Finalize primeiro a inspeção visual desta estrutura."));return wrap;}
+  if(!isLuxHabilitado(v)){
+    inner.appendChild(el("div",{class:"card empty"},"A campanha de Iluminação / Lux está desabilitada para esta inspeção."));
+    const bVoltar = el("button", { class: "submit-btn", style: "margin-top:14px" }, "Voltar para a inspeção");
+    bVoltar.addEventListener("click", () => go("vistoria", v.id));
+    inner.appendChild(bVoltar);
+    return wrap;
+  }
+
+  // Topo: Toggle de Estrutura sem iluminação / Não aplicável
+  const naCard = Card({ style: "margin-bottom:12px;padding:12px;display:flex;align-items:center;justify-content:space-between;gap:8px" });
+  naCard.appendChild(el("div", {},
+    el("strong", {}, "Estrutura sem iluminação / Não aplicável"),
+    el("div", { style: "font-size:12px;color:var(--ink-soft)" }, "Dispensa aferições de lux nesta estrutura")
+  ));
+  const naBtn = el("button", { class: `ghost-btn touch-btn ${e.luxNaoAplica ? "active-choice" : ""}`, style: e.luxNaoAplica ? "background:var(--primary);color:#fff;font-weight:700" : "" }, e.luxNaoAplica ? "✓ Marcada como N/A" : "Marcar como N/A");
+  naBtn.addEventListener("click", async () => {
+    e.luxNaoAplica = !e.luxNaoAplica;
+    if (e.luxNaoAplica) {
+      e.luxFinalizada = true;
+      e.luxFinalizadaAt = new Date().toISOString();
+    } else {
+      e.luxFinalizada = false;
+    }
+    touchLuxNaoAplica(e);
+    touchStage(e, "lux");
+    await saveVistoriaNow();
+    render();
+  });
+  naCard.appendChild(naBtn);
+  inner.appendChild(naCard);
+
+  if (e.luxNaoAplica) {
+    const naNotice = Card({ class: "measure-hero lux-hero", style: "margin-bottom:14px" });
+    naNotice.appendChild(el("div", { class: "measure-kicker" }, `ILUMINAÇÃO · Estrutura ${e.codigo||"—"}`));
+    naNotice.appendChild(el("div", { style: "font-size:16px;font-weight:700;margin:10px 0" }, "Estrutura dispensada de medição de Lux."));
+    naNotice.appendChild(el("div", { style: "font-size:13px;color:var(--ink-soft)" }, "Nenhuma medição é exigida para concluir esta estrutura."));
+    inner.appendChild(naNotice);
+
+    const finishNA = el("button", { class: "field-next-btn", style: "margin-top:14px" }, "✓ CONTINUAR PARA PRÓXIMA ESTRUTURA");
+    finishNA.addEventListener("click", async () => {
+      const nextE = nextStageStructure(v, e, "lux");
+      if (nextE) {
+        setResume(v, "lux", nextE);
+        await saveVistoriaNow();
+        return go("lux", v.id, nextE.id);
+      }
+      delete v.resume;
+      await saveVistoriaNow();
+      go("vistoria", v.id);
+    });
+    inner.appendChild(finishNA);
+    return wrap;
+  }
+
+  const metodo = getLuxMetodo(v);
+
+  // Se MÉTODO B: 1 medição por montante
+  if (metodo === "B") {
+    const ord = (e.montantes || []).slice().sort((a,b) => a.numero - b.numero);
+    if (!ord.length) {
+      inner.appendChild(el("div", { class: "card empty" }, "Nenhum montante cadastrado para esta estrutura."));
+      return wrap;
+    }
+    let m = ord.find((x) => x.id === state.activeMontanteId);
+    if (!m) m = ord.find((x) => {
+      const it = montanteLuxItem(x);
+      return !it || (!it.status || it.status === "pendente");
+    }) || ord[0];
+
+    setResume(v, "lux", e, m);
+    const idx = ord.findIndex((x) => x.id === m.id);
+    const prev = ord[idx - 1], next = ord[idx + 1];
+    let item = montanteLuxItem(m);
+    if (!item) {
+      item = { id: "lux", codigo: "9.45", categoria: "Iluminação", familia: "Ambiente e Iluminação", nivel: "montante", nome: "Aferição de iluminação no montante", tipo: "medicao", unidade: "lux", min: 200, peca: "Aferição de iluminação no montante", status: "pendente", revisado: false, ocorrencias: [], valor: "" };
+      m.itens = m.itens || [];
+      m.itens.push(item);
+    }
+    normalizeMontanteItem(item);
+
+    const prog = luxProgress(e, v);
+    const hero = Card({ class: "measure-hero lux-hero" });
+    hero.appendChild(el("div", { class: "measure-kicker" }, `ILUMINAÇÃO (MÉTODO B) · Estrutura ${e.codigo||"—"}`));
+    hero.appendChild(el("div", { class: "measure-number" }, "MONTANTE ", el("strong", {}, String(m.numero).padStart(3, "0")), el("span", {}, ` de ${ord.length}`)));
+    hero.appendChild(el("div", { class: "measure-progress" },
+      el("div", { class: "progress-track" }, el("div", { class: "progress-fill", style: `width:${ord.length ? Math.round(prog.done / ord.length * 100) : 0}%` })),
+      el("span", {}, `${prog.done}/${ord.length} avaliados · limite ≥ ${item.min} lux`)
+    ));
+    hero.appendChild(el("div", { class: "measure-status" },
+      prog.problems ? Tag("problema", "sm", `${prog.problems} abaixo`) : (prog.complete ? Tag("ok", "sm", "Concluída") : Tag("pendente", "sm", "Em andamento")),
+      el("span", { id: "save-indicator", class: "save-indicator" }, "✓ salvo")
+    ));
+    inner.appendChild(hero);
+
+    const isResolved = item.status === "naoaplica" || (item.valor !== undefined && item.valor !== null && String(item.valor).trim() !== "");
+    const cardM = Card({ class: "lux-measure-card", style: "margin-top:12px" });
+    cardM.appendChild(el("div", { class: "occurrence-head" },
+      el("div", { style: "font-weight:700" }, `Medição Montante Nº ${m.numero}`),
+      Tag(item.status === "naoaplica" ? "naoaplica" : (item.valor ? statusFromMedicao(item.valor, item.min) : "pendente"), "sm", item.status === "naoaplica" ? "Não foi possível medir" : undefined)
+    ));
+
+    if (item.status === "naoaplica") {
+      cardM.appendChild(el("div", { style: "padding:8px 0;font-size:13px;color:var(--ink-soft)" }, "Marcado como: Não foi possível medir neste montante."));
+      const bAlt = el("button", { class: "ghost-btn touch-btn", style: "margin-top:6px" }, "Informar valor medido");
+      bAlt.addEventListener("click", async () => {
+        item.status = "pendente";
+        item.valor = "";
+        item.revisado = false;
+        e.luxFinalizada = false;
+        touchItem(item);
+        touchStage(e, "lux");
+        await saveVistoriaNow();
+        render();
+      });
+      cardM.appendChild(bAlt);
+    } else {
+      const inp = inputEl(item.valor || "", (val) => {
+        item.valor = val;
+        item.status = statusFromMedicao(val, item.min);
+        item.revisado = true;
+        e.luxFinalizada = false;
+        touchItem(item);
+        touchStage(e, "lux");
+        saveVistoriaDebounced();
+      }, `Mínimo ${item.min}`, "number");
+      inp.classList.add("lux-value-input");
+      cardM.appendChild(Field(`Valor medido (${item.unidade})`, inp));
+
+      const st = statusFromMedicao(item.valor, item.min);
+      cardM.appendChild(el("div", { class: "measurement-hint" },
+        !item.valor ? `Digite o valor medido · mínimo ${item.min} ${item.unidade}` : (st === "ok" ? `✓ Dentro do limite (≥ ${item.min} ${item.unidade})` : `⚠ Abaixo do limite (${item.min} ${item.unidade})`)
+      ));
+
+      const bNA = el("button", { class: "quick-secondary-btn", style: "margin-top:8px" }, "Não foi possível medir");
+      bNA.addEventListener("click", async () => {
+        item.status = "naoaplica";
+        item.valor = "";
+        item.revisado = true;
+        e.luxFinalizada = false;
+        touchItem(item);
+        touchStage(e, "lux");
+        await saveVistoriaNow();
+        render();
+      });
+      cardM.appendChild(bNA);
+    }
+
+    const photoWrap = el("div", { style: "margin-top:8px" });
+    renderPhotoArea(photoWrap, item, () => { touchItem(item); touchStage(e, "lux"); });
+    cardM.appendChild(photoWrap);
+    inner.appendChild(cardM);
+
+    const advance = async () => {
+      const currentResolved = item.status === "naoaplica" || (item.valor !== undefined && item.valor !== null && String(item.valor).trim() !== "");
+      if (!currentResolved) {
+        alert("Preencha o valor ou marque 'Não foi possível medir' antes de avançar.");
+        return;
+      }
+      if (next) {
+        setResume(v, "lux", e, next);
+        state.activeMontanteId = next.id;
+        await saveVistoriaNow();
+        return render();
+      }
+      const p = luxProgress(e, v);
+      if (!p.complete) {
+        e.luxFinalizada = true;
+        e.luxFinalizadaAt = new Date().toISOString();
+        touchStage(e, "lux");
+      }
+      const nextE = nextStageStructure(v, e, "lux");
+      if (nextE) {
+        setResume(v, "lux", nextE);
+        await saveVistoriaNow();
+        return go("lux", v.id, nextE.id);
+      }
+      delete v.resume;
+      await saveVistoriaNow();
+      go("vistoria", v.id);
+    };
+
+    const nav = el("div", { class: "field-secondary-row", style: "margin-top:14px" });
+    const bp = el("button", { class: "ghost-btn touch-btn" }, "◀ Anterior");
+    bp.disabled = !prev;
+    if (!prev) bp.style.opacity = ".4";
+    bp.addEventListener("click", async () => {
+      if (prev) {
+        setResume(v, "lux", e, prev);
+        state.activeMontanteId = prev.id;
+        await saveVistoriaNow();
+        render();
+      }
+    });
+    nav.appendChild(bp);
+
+    const exit = el("button", { class: "ghost-btn touch-btn" }, "Sair do Lux");
+    exit.addEventListener("click", async () => {
+      e.luxFinalizada = luxProgress(e, v).complete;
+      await saveVistoriaNow();
+      go("vistoria", v.id);
+    });
+    nav.appendChild(exit);
+    inner.appendChild(nav);
+
+    if (isResolved) {
+      const sticky = el("div", { class: "field-sticky no-print" });
+      const nextE = !next ? nextStageStructure(v, e, "lux") : null;
+      const b = el("button", { class: "field-next-btn" }, next ? "PRÓXIMO MONTANTE →" : (nextE ? `✓ ${e.codigo||"ESTRUTURA"} CONCLUÍDA → ${nextE.codigo||"PRÓXIMA"}` : "✓ FINALIZAR CAMPANHA DE LUX"));
+      b.addEventListener("click", advance);
+      sticky.appendChild(b);
+      wrap.appendChild(sticky);
+    }
+    return wrap;
+  }
+
+  // Se MÉTODO A: 3 posições fixas (Início, Meio, Final)
+  if (metodo === "A") {
+    const item = iluminacaoItem(e);
+    if (!item) { inner.appendChild(el("div", { class: "empty" }, "Item de iluminação não encontrado no catálogo.")); return wrap; }
+    item.ocorrencias = item.ocorrencias || [];
+    setResume(v, "lux", e);
+
+    const prog = luxProgress(e, v);
+    const hero = Card({ class: "measure-hero lux-hero" });
+    hero.appendChild(el("div", { class: "measure-kicker" }, `ILUMINAÇÃO (MÉTODO A) · Estrutura ${e.codigo||"—"}`));
+    hero.appendChild(el("div", { class: "lux-main" }, el("strong", {}, `${prog.done}/3`), el("span", {}, "pontos avaliados")));
+    hero.appendChild(el("div", { class: "lux-limit" }, `Limite configurado: ≥ ${item.min} ${item.unidade}`));
+    hero.appendChild(el("div", { class: "measure-status" },
+      prog.problems ? Tag("problema", "sm", `${prog.problems} abaixo`) : (prog.complete ? Tag("ok", "sm", "Concluída") : Tag("pendente", "sm", "Em andamento")),
+      el("span", { id: "save-indicator", class: "save-indicator" }, "✓ salvo")
+    ));
+    inner.appendChild(hero);
+
+    const POSICOES = [
+      { id: "inicio", label: "Início do corredor" },
+      { id: "meio", label: "Meio do corredor" },
+      { id: "final", label: "Final do corredor" }
+    ];
+
+    const list = el("div", { class: "lux-list", style: "display:flex;flex-direction:column;gap:10px;margin-top:12px" });
+
+    POSICOES.forEach(({ id: posId, label: posLabel }) => {
+      let oc = item.ocorrencias.find((o) => (o.posicao || "").toLowerCase() === posId);
+      const cardP = Card({ class: "lux-measure-card" });
+      const head = el("div", { class: "occurrence-head" },
+        el("div", { style: "font-weight:700" }, posLabel),
+        Tag(oc ? (oc.status === "naoaplica" ? "naoaplica" : (oc.valor ? statusFromMedicao(oc.valor, item.min) : "pendente")) : "pendente", "sm", oc && oc.status === "naoaplica" ? "Não foi possível medir" : undefined)
+      );
+      cardP.appendChild(head);
+
+      if (!oc) {
+        const emptyState = el("div", { style: "padding:8px 0;display:flex;gap:8px;flex-wrap:wrap" });
+        const bMed = el("button", { class: "ghost-btn touch-btn primary" }, "＋ Informar medição");
+        bMed.addEventListener("click", async () => {
+          const novaOc = touchOccurrence(newOcorrencia("pendente"));
+          novaOc.posicao = posId;
+          novaOc.montanteRef = posLabel;
+          item.ocorrencias.push(novaOc);
+          e.luxFinalizada = false;
+          touchStage(e, "lux");
+          await saveVistoriaNow();
+          render();
+        });
+        const bNA = el("button", { class: "quick-secondary-btn" }, "Não foi possível medir");
+        bNA.addEventListener("click", async () => {
+          const novaOc = touchOccurrence(newOcorrencia("naoaplica"));
+          novaOc.posicao = posId;
+          novaOc.montanteRef = posLabel;
+          novaOc.status = "naoaplica";
+          novaOc.descTxt = "Não foi possível medir";
+          item.ocorrencias.push(novaOc);
+          e.luxFinalizada = false;
+          touchStage(e, "lux");
+          await saveVistoriaNow();
+          render();
+        });
+        emptyState.appendChild(bMed);
+        emptyState.appendChild(bNA);
+        cardP.appendChild(emptyState);
+      } else if (oc.status === "naoaplica") {
+        cardP.appendChild(el("div", { style: "padding:6px 0;font-size:13px;color:var(--ink-soft)" }, "Ponto marcado como: Não foi possível medir."));
+        const btnRow = el("div", { style: "display:flex;gap:8px;align-items:center;margin-top:6px" });
+        const bMudar = el("button", { class: "ghost-btn touch-btn" }, "Informar valor numérico");
+        bMudar.addEventListener("click", async () => {
+          oc.status = "pendente";
+          oc.valor = "";
+          oc.descTxt = "";
+          e.luxFinalizada = false;
+          touchOccurrenceFull(oc, item, e);
+          await saveVistoriaNow();
+          render();
+        });
+        const bDel = el("button", { class: "icon-btn", html: svg("trash", 15) });
+        bDel.addEventListener("click", async () => {
+          recordTombstone(v, "ocorrencias", oc.id);
+          const idx = item.ocorrencias.indexOf(oc);
+          if (idx >= 0) item.ocorrencias.splice(idx, 1);
+          e.luxFinalizada = false;
+          touchStage(e, "lux");
+          await saveVistoriaNow();
+          render();
+        });
+        btnRow.appendChild(bMudar);
+        btnRow.appendChild(bDel);
+        cardP.appendChild(btnRow);
+
+        const photoWrap = el("div", { style: "margin-top:6px" });
+        renderPhotoArea(photoWrap, oc, () => touchOccurrenceFull(oc, item, e));
+        cardP.appendChild(photoWrap);
+      } else {
+        const inp = inputEl(oc.valor || "", (val) => {
+          oc.valor = val;
+          oc.status = statusFromMedicao(val, item.min);
+          e.luxFinalizada = false;
+          touchOccurrenceFull(oc, item, e);
+          saveVistoriaDebounced();
+        }, `Mínimo ${item.min}`, "number");
+        inp.classList.add("lux-value-input");
+        cardP.appendChild(Field(`Valor medido (${item.unidade})`, inp));
+
+        const st = statusFromMedicao(oc.valor, item.min);
+        cardP.appendChild(el("div", { class: "measurement-hint" },
+          !oc.valor ? `Digite o valor medido · mínimo ${item.min} ${item.unidade}` : (st === "ok" ? `✓ Dentro do limite (≥ ${item.min} ${item.unidade})` : `⚠ Abaixo do limite (${item.min} ${item.unidade})`)
+        ));
+
+        const btnRow = el("div", { style: "display:flex;gap:8px;align-items:center;margin-top:6px" });
+        const bNA = el("button", { class: "quick-secondary-btn" }, "Não foi possível medir");
+        bNA.addEventListener("click", async () => {
+          oc.status = "naoaplica";
+          oc.valor = "";
+          oc.descTxt = "Não foi possível medir";
+          e.luxFinalizada = false;
+          touchOccurrenceFull(oc, item, e);
+          await saveVistoriaNow();
+          render();
+        });
+        const bDel = el("button", { class: "icon-btn", html: svg("trash", 15) });
+        bDel.addEventListener("click", async () => {
+          recordTombstone(v, "ocorrencias", oc.id);
+          const idx = item.ocorrencias.indexOf(oc);
+          if (idx >= 0) item.ocorrencias.splice(idx, 1);
+          e.luxFinalizada = false;
+          touchStage(e, "lux");
+          await saveVistoriaNow();
+          render();
+        });
+        btnRow.appendChild(bNA);
+        btnRow.appendChild(bDel);
+        cardP.appendChild(btnRow);
+
+        const photoWrap = el("div", { style: "margin-top:6px" });
+        renderPhotoArea(photoWrap, oc, () => touchOccurrenceFull(oc, item, e));
+        cardP.appendChild(photoWrap);
+      }
+      list.appendChild(cardP);
+    });
+
+    inner.appendChild(list);
+
+    const finish = el("button", { class: "field-next-btn", style: "margin-top:16px" }, e.luxFinalizada ? "✓ ETAPA LUX CONCLUÍDA — CONTINUAR" : "✓ FINALIZAR LUX DESTA ESTRUTURA");
+    finish.addEventListener("click", async () => {
+      const p = luxProgress(e, v);
+      if (!p.complete && !e.luxFinalizada) {
+        if (p.done < 3) return alert(`Preencha ou justifique os 3 pontos (Início, Meio e Final) antes de finalizar a etapa de Lux (faltam ${3 - p.done}).`);
+        e.luxFinalizada = true;
+        e.luxFinalizadaAt = new Date().toISOString();
+        touchStage(e, "lux");
+      }
+      const nextE = nextStageStructure(v, e, "lux");
+      if (nextE) {
+        setResume(v, "lux", nextE);
+        await saveVistoriaNow();
+        return go("lux", v.id, nextE.id);
+      }
+      delete v.resume;
+      await saveVistoriaNow();
+      go("vistoria", v.id);
+    });
+    inner.appendChild(finish);
+    return wrap;
+  }
+
+  // Se MÉTODO LEGADO (v2.18.8 intacto):
+  const item = iluminacaoItem(e);
+  if (!item) { inner.appendChild(el("div", { class: "empty" }, "Item 9.45 de iluminação não encontrado no catálogo.")); return wrap; }
+  item.ocorrencias = item.ocorrencias || [];
+  setResume(v, "lux", e);
+  const prog = luxProgress(e, v);
+  const hero = Card({ class: "measure-hero lux-hero" });
+  hero.appendChild(el("div", { class: "measure-kicker" }, `ILUMINAÇÃO (LEGADO) · Estrutura ${e.codigo||"—"}`));
+  hero.appendChild(el("div", { class: "lux-main" }, el("strong", {}, String(prog.measurements)), el("span", {}, prog.measurements === 1 ? "aferição válida" : "aferições válidas")));
+  hero.appendChild(el("div", { class: "lux-limit" }, `Limite configurado: ≥ ${item.min} ${item.unidade}`));
+  hero.appendChild(el("div", { class: "measure-status" },
+    prog.problems ? Tag("problema", "sm", `${prog.problems} abaixo`) : (prog.complete ? Tag("ok", "sm", "Concluída") : Tag("pendente", "sm", "Em andamento")),
+    el("span", { id: "save-indicator", class: "save-indicator" }, "✓ salvo")
+  ));
+  inner.appendChild(hero);
+
+  const list = el("div", { class: "lux-list" });
+  const renderLuxCard = (oc, idx) => {
+    normalizeOccurrence(oc, item, "pendente");
+    const c = Card({ class: "lux-measure-card" });
+    c.appendChild(el("div", { class: "occurrence-head" },
+      el("div", {}, el("div", { style: "font-weight:700" }, `Aferição ${idx + 1}`), Tag(Boolean(String(oc.montanteRef || "").trim()) ? ocorrenciaStatus(oc, item) : "pendente", "sm")),
+      (() => {
+        const b = el("button", { class: "icon-btn", html: svg("trash", 15) });
+        b.addEventListener("click", async () => {
+          if (confirm("Remover esta aferição?")) {
+            recordTombstone(v, "ocorrencias", oc.id);
+            item.ocorrencias.splice(idx, 1);
+            e.luxFinalizada = false;
+            touchStage(e, "lux");
+            await saveVistoriaNow();
+            render();
+          }
+        });
+        return b;
+      })()
+    ));
+    const montanteRefs = (e.montantes || []).slice().sort((a, b) => a.numero - b.numero).map((m) => `Montante ${m.numero}`);
+    const refField = choiceOrCustomField("Montante / posição de referência", oc.montanteRef || "", montanteRefs, (val) => {
+      oc.montanteRef = val;
+      e.luxFinalizada = false;
+      touchOccurrenceFull(oc, item, e);
+      saveVistoriaDebounced();
+    }, "Ex: Centro do corredor");
+    refField.classList.add("lux-ref-field");
+    c.appendChild(refField);
+
+    const inp = inputEl(oc.valor || "", (val) => {
+      oc.valor = val;
+      oc.status = statusFromMedicao(val, item.min);
+      e.luxFinalizada = false;
+      touchOccurrenceFull(oc, item, e);
+      saveVistoriaDebounced();
+    }, `Mínimo ${item.min}`, "number");
+    inp.classList.add("lux-value-input");
+    c.appendChild(Field(`Valor medido (${item.unidade})`, inp));
+
+    const st = statusFromMedicao(oc.valor, item.min);
+    const hasRef = Boolean(String(oc.montanteRef || "").trim());
+    c.appendChild(el("div", { class: "measurement-hint" },
+      !hasRef ? "Selecione primeiro o montante / posição de referência." : (!oc.valor ? `Digite o valor medido · mínimo ${item.min} ${item.unidade}` : (st === "ok" ? `✓ Dentro do limite (≥ ${item.min} ${item.unidade})` : `⚠ Abaixo do limite (${item.min} ${item.unidade})`))
+    ));
+    const photoWrap = el("div", { style: "margin-top:6px" });
+    renderPhotoArea(photoWrap, oc, () => touchOccurrenceFull(oc, item, e));
+    c.appendChild(photoWrap);
+    return c;
+  };
+
+  item.ocorrencias.forEach((oc, idx) => list.appendChild(renderLuxCard(oc, idx)));
+  if (!item.ocorrencias.length) list.appendChild(el("div", { class: "card empty" }, "Nenhuma aferição ainda. Registre os pontos definidos pelo técnico para esta estrutura."));
+  inner.appendChild(list);
+
+  const add = el("button", { class: "measure-add-btn" }, "＋ Adicionar aferição");
+  add.addEventListener("click", async () => {
+    item.ocorrencias.push(touchOccurrence(newOcorrencia("pendente")));
+    e.luxFinalizada = false;
+    touchStage(e, "lux");
+    await saveVistoriaNow();
+    render();
+    setTimeout(() => {
+      const cards = [...document.querySelectorAll(".lux-measure-card")];
+      const last = cards[cards.length - 1];
+      const select = last && last.querySelector(".lux-ref-field select");
+      if (select) select.focus();
+    }, 120);
+  });
+  inner.appendChild(add);
+
+  const finish = el("button", { class: "field-next-btn", style: "margin-top:12px" }, e.luxFinalizada ? "✓ ETAPA LUX CONCLUÍDA — CONTINUAR" : "✓ FINALIZAR LUX DESTA ESTRUTURA");
+  finish.addEventListener("click", async () => {
+    const p = luxProgress(e, v);
+    if (!e.luxFinalizada) {
+      if (!item.ocorrencias.length) return alert("Registre pelo menos uma aferição antes de finalizar a etapa de Lux.");
+      const noRef = item.ocorrencias.filter((oc) => !String(oc.montanteRef || "").trim()).length;
+      if (noRef) return alert(`Há ${noRef} aferição(ões) sem montante / posição de referência.`);
+      if (p.pending) return alert(`Há ${p.pending} aferição(ões) sem valor válido.`);
+      e.luxFinalizada = true;
+      e.luxFinalizadaAt = new Date().toISOString();
+      touchStage(e, "lux");
+    }
+    const nextE = nextStageStructure(v, e, "lux");
+    if (nextE) {
+      setResume(v, "lux", nextE);
+      await saveVistoriaNow();
+      return go("lux", v.id, nextE.id);
+    }
+    delete v.resume;
+    await saveVistoriaNow();
+    go("vistoria", v.id);
+  });
+  inner.appendChild(finish);
+  return wrap;
 }
 
 function statusSelect(item) {
@@ -2887,7 +3835,44 @@ async function buildInspectionPdf(v) {
   } catch (e) { /* segue sem logo se não conseguir carregar */ }
 
   text(v.lojaCd || "Inspeção", 18, { bold: true, gap: 2 });
-  text([v.local, (v.estruturas || []).length + " estrutura(s)", "Inspetor(es): " + (v.inspetor || "—"), fmtDateOnly(v.data)].filter(Boolean).join("  ·  "), 10, { color: "#5B6470", gap: 16 });
+  text([v.local, (v.estruturas || []).length + " estrutura(s)", "Inspetor(es): " + (v.inspetor || "—"), fmtDateOnly(v.data)].filter(Boolean).join("  ·  "), 10, { color: "#5B6470", gap: 12 });
+
+  // Seção de Campanhas no Laudo PDF
+  ensureSpace(40);
+  text("CAMPANHAS DA INSPEÇÃO", 11, { bold: true, gap: 4 });
+  text("• Inspeção Visual: Concluída", 9.5, { color: "#374151", gap: 3 });
+  if (!isPrumoHabilitado(v)) {
+    text(`• Prumo a Laser: Não realizado — Motivo: ${v.workflowConfig && v.workflowConfig.prumoMotivo || "Não informado"}`, 9.5, { color: "#374151", gap: 3 });
+  } else {
+    text("• Prumo a Laser: Realizado", 9.5, { color: "#374151", gap: 3 });
+  }
+
+  if (!isLuxHabilitado(v)) {
+    text(`• Iluminação / Lux: Não realizada — Motivo: ${v.workflowConfig && v.workflowConfig.luxMotivo || "Não informado"}`, 9.5, { color: "#374151", gap: 10 });
+  } else {
+    const met = getLuxMetodo(v);
+    const metNome = met === "A" ? "Método A (3 pontos fixos: Início, Meio e Final)" : (met === "B" ? "Método B (1 medição por montante)" : "Legado");
+    const allLuxPoints = [];
+    let estruturasDispensadas = 0;
+    (v.estruturas || []).forEach((e) => {
+      if (e.luxNaoAplica) { estruturasDispensadas++; return; }
+      if (met === "B") {
+        (e.montantes || []).forEach((m) => {
+          const it = montanteLuxItem(m);
+          if (it) allLuxPoints.push(it);
+        });
+      } else {
+        const it = iluminacaoItem(e);
+        if (it && Array.isArray(it.ocorrencias)) allLuxPoints.push(...it.ocorrencias);
+      }
+    });
+    const stats = calculateLuxStats(allLuxPoints);
+    let statText = `• Iluminação / Lux: Realizada — ${metNome}`;
+    if (stats.count > 0) statText += ` · Média: ${stats.avg} lux · Mínimo: ${stats.min} lux · Máximo: ${stats.max} lux`;
+    if (stats.naoAplicaCount > 0) statText += ` · ${stats.naoAplicaCount} ponto(s) não foi possível medir`;
+    if (estruturasDispensadas > 0) statText += ` · ${estruturasDispensadas} estrutura(s) dispensada(s)`;
+    text(statText, 9.5, { color: "#374151", gap: 10 });
+  }
 
   for (const e of (v.estruturas || [])) {
     ensureSpace(30);
@@ -2896,15 +3881,22 @@ async function buildInspectionPdf(v) {
     if (sub) text(sub, 9, { color: "#9AA2AC", gap: 4 });
     if (e.observacoesGerais) text("Observações da estrutura: " + e.observacoesGerais, 9, { color: "#5B6470", gap: 8 });
 
-    const problemEntries = montanteProblemEntries(e);
-    const estOcorrencias = estruturaProblemOccurrences(e);
+    const problemEntries = montanteAnomalyEntries(e);
+    const estOcorrencias = estruturaAnomalyOccurrences(e);
     const estMedicoes = estruturaMedicoesInformativas(e);
 
     if (!problemEntries.length && !estOcorrencias.length) {
       text("Nenhum apontamento de anomalia registrado.", 10, { color: "#5B6470", gap: 8 });
     }
+    if (e.luxNaoAplica) {
+      text("Iluminação / Lux: Estrutura sem iluminação / Não aplicável.", 9.5, { color: "#5B6470", gap: 4 });
+    }
     for (const { it, oc } of estMedicoes) {
-      text(`${it.codigo ? "[" + it.codigo + "] " : ""}${it.nome} — ${oc.montanteRef || "Estrutura"}: ${oc.valor} ${it.unidade}`, 9.5, { color: "#476B55", gap: 4 });
+      if (oc.status === "naoaplica") {
+        text(`${it.codigo ? "[" + it.codigo + "] " : ""}${it.nome} — ${oc.posicao || oc.montanteRef || "Ponto"}: Não foi possível medir`, 9.5, { color: "#5B6470", gap: 4 });
+      } else {
+        text(`${it.codigo ? "[" + it.codigo + "] " : ""}${it.nome} — ${oc.posicao || oc.montanteRef || "Ponto"}: ${oc.valor} ${it.unidade}`, 9.5, { color: "#476B55", gap: 4 });
+      }
     }
     if (!problemEntries.length && !estOcorrencias.length) continue;
 
@@ -3050,6 +4042,42 @@ function ReportScreen() {
   banner.appendChild(infoRow);
   printable.appendChild(banner);
 
+  const wfReportCard = el("div", { class: "card", style: "margin-bottom:16px;border-left:4px solid var(--primary);padding:12px 14px" });
+  wfReportCard.appendChild(el("div", { style: "font-weight:700;font-size:13.5px;margin-bottom:6px" }, "Campanhas da Inspeção"));
+  wfReportCard.appendChild(el("div", { style: "font-size:12.5px;margin-bottom:3px" }, "• Inspeção Visual: Concluída"));
+  if (!isPrumoHabilitado(v)) {
+    wfReportCard.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft);margin-bottom:3px" }, `• Prumo a Laser: Não realizado — Motivo: ${v.workflowConfig && v.workflowConfig.prumoMotivo || "Não informado"}`));
+  } else {
+    wfReportCard.appendChild(el("div", { style: "font-size:12.5px;margin-bottom:3px" }, "• Prumo a Laser: Realizado"));
+  }
+  if (!isLuxHabilitado(v)) {
+    wfReportCard.appendChild(el("div", { style: "font-size:12.5px;color:var(--ink-soft)" }, `• Iluminação / Lux: Não realizada — Motivo: ${v.workflowConfig && v.workflowConfig.luxMotivo || "Não informado"}`));
+  } else {
+    const met = getLuxMetodo(v);
+    const metNome = met === "A" ? "Método A (3 pontos fixos: Início, Meio e Final)" : (met === "B" ? "Método B (1 medição por montante)" : "Legado");
+    const allLuxPoints = [];
+    let estruturasDispensadas = 0;
+    (v.estruturas || []).forEach((e) => {
+      if (e.luxNaoAplica) { estruturasDispensadas++; return; }
+      if (met === "B") {
+        (e.montantes || []).forEach((m) => {
+          const it = montanteLuxItem(m);
+          if (it) allLuxPoints.push(it);
+        });
+      } else {
+        const it = iluminacaoItem(e);
+        if (it && Array.isArray(it.ocorrencias)) allLuxPoints.push(...it.ocorrencias);
+      }
+    });
+    const stats = calculateLuxStats(allLuxPoints);
+    let statText = `• Iluminação / Lux: Realizada — ${metNome}`;
+    if (stats.count > 0) statText += ` · Média: ${stats.avg} lux · Mínimo: ${stats.min} lux · Máximo: ${stats.max} lux`;
+    if (stats.naoAplicaCount > 0) statText += ` · ${stats.naoAplicaCount} ponto(s) não foi possível medir`;
+    if (estruturasDispensadas > 0) statText += ` · ${estruturasDispensadas} estrutura(s) dispensada(s)`;
+    wfReportCard.appendChild(el("div", { style: "font-size:12.5px" }, statText));
+  }
+  printable.appendChild(wfReportCard);
+
   const topActions = el("div", { class: "no-print", style: "display:flex;flex-direction:column;gap:8px;margin-bottom:18px" });
   const btnAnomalias = el("button", { class: "action-btn", style: "background:var(--amber-bg);color:var(--amber-dark);border:1px solid var(--line)" }, el("span", { html: svg("wrench", 15) }), " Relatório de Anomalias (tabela / CSV)");
   btnAnomalias.addEventListener("click", () => go("anomalias", v.id));
@@ -3097,8 +4125,8 @@ function ReportScreen() {
 
   (v.estruturas || []).forEach((e) => {
     const est = estruturaStatus(e);
-    const problemEntries = montanteProblemEntries(e);
-    const estOcorrencias = estruturaProblemOccurrences(e);
+    const problemEntries = montanteAnomalyEntries(e);
+    const estOcorrencias = estruturaAnomalyOccurrences(e);
     const estMedicoes = estruturaMedicoesInformativas(e);
     printable.appendChild(el("h3", { class: "section-title", style: "display:flex;align-items:center;justify-content:space-between" },
       el("span", {}, "Estrutura ", e.codigo || "—"), Tag(est, "sm")));
@@ -3202,8 +4230,8 @@ function ReportScreen() {
 async function shareReport(v, st) {
   let text = `Relatório de Inspeção — ${state.config.empresa}\nLoja/CD: ${v.lojaCd}${v.local ? " · " + v.local : ""}\nInspetor(es): ${v.inspetor}\nData: ${fmtDateOnly(v.data)}\nResultado geral: ${STATUS[st].label}\n`;
   (v.estruturas || []).forEach((e) => {
-    const problemEntries = montanteProblemEntries(e);
-    const estOcorrencias = estruturaProblemOccurrences(e);
+    const problemEntries = montanteAnomalyEntries(e);
+    const estOcorrencias = estruturaAnomalyOccurrences(e);
     text += `\n— Estrutura ${e.codigo} [${STATUS[estruturaStatus(e)].label}] —\n`;
     const linhas = [];
     problemEntries.forEach(({ m, i }) => linhas.push(`  - Montante ${m.numero}: ${i.codigo ? "[" + i.codigo + "] " : ""}${i.nome} [${STATUS[i.status].label}]${i.obs ? ": " + i.obs : ""}`));
@@ -3223,15 +4251,15 @@ async function shareReport(v, st) {
 function buildAnomaliaRows(v) {
   const rows=[];
   (v.estruturas||[]).forEach((e)=>{
-    montanteProblemEntries(e).forEach(({m,item,oc,i})=>rows.push({
+    montanteAnomalyEntries(e).forEach(({m,item,oc,i})=>rows.push({
       estruturaId:e.id,montanteId:m.id,itemId:item.id,ocorrenciaId:oc&&oc.id,
       setor:e.setor||"",tipoEstrutura:e.tipoEstrutura||"",numeroEstrutura:e.codigo||"",lado:e.lado||"",montante:m.numero,corte:i.corte||"",
       codigoAnomalia:item.codigo||"",nomeAnomalia:item.nome||"",descricao:i.descTxt||"",tipo:i.tipoTxt||"",localizacao:i.localTxt||"",grau:i.grauTxt||"",
       categoria:item.categoria||"",correcao:i.correcao||"",qtd:i.qtd==null?1:i.qtd,fabricante:m.fabricante||e.fabricante||""
     }));
-    estruturaProblemOccurrences(e).forEach(({it,oc})=>rows.push({
+    estruturaAnomalyOccurrences(e).forEach(({it,oc})=>rows.push({
       estruturaId:e.id,estItemId:it.id,ocorrenciaId:oc.id,setor:e.setor||"",tipoEstrutura:e.tipoEstrutura||"",numeroEstrutura:e.codigo||"",lado:e.lado||"",montante:oc.montanteRef||"(estrutura)",corte:"",
-      codigoAnomalia:it.codigo||"",nomeAnomalia:it.nome||"",descricao:oc.descTxt||"",tipo:oc.tipoTxt||"",localizacao:oc.localTxt||"",grau:oc.grauTxt||(it.tipo==="medicao"&&oc.valor?`Medição: ${oc.valor} ${it.unidade}`:""),categoria:it.categoria||"",correcao:oc.correcao||"",qtd:oc.qtd==null?1:oc.qtd,fabricante:e.fabricante||""
+      codigoAnomalia:it.codigo||"",nomeAnomalia:it.nome||"",descricao:oc.descTxt||"",tipo:oc.tipoTxt||"",localizacao:oc.localTxt||"",grau:oc.grauTxt||"",categoria:it.categoria||"",correcao:oc.correcao||"",qtd:oc.qtd==null?1:oc.qtd,fabricante:e.fabricante||""
     }));
   });
   return rows;
@@ -3332,8 +4360,8 @@ function AnomaliasScreen() {
 function buildPartsForVistoria(v) {
   const bucket={};
   (v.estruturas||[]).filter((e)=>!e.resolvido&&isProblem(estruturaStatus(e))).forEach((e)=>{
-    montanteProblemEntries(e).forEach(({m,item,i})=>{const q=Number(i.qtd)>0?Number(i.qtd):1;const peca=i.tipoTxt||pecaDoItem(item);if(!bucket[peca])bucket[peca]={peca,qtd:0,graus:new Set(),refs:new Set()};bucket[peca].qtd+=q;if(i.grauTxt)bucket[peca].graus.add(i.grauTxt);bucket[peca].refs.add(`${e.codigo} · Montante ${m.numero}`);});
-    estruturaProblemOccurrences(e).forEach(({it,oc})=>{if(it.tipo==="medicao")return;const q=Number(oc.qtd)>0?Number(oc.qtd):1;const peca=oc.tipoTxt||it.peca;if(!bucket[peca])bucket[peca]={peca,qtd:0,graus:new Set(),refs:new Set()};bucket[peca].qtd+=q;if(oc.grauTxt)bucket[peca].graus.add(oc.grauTxt);bucket[peca].refs.add(`${e.codigo} · ${oc.montanteRef||"estrutura"}`);});
+    montanteAnomalyEntries(e).forEach(({m,item,i})=>{const q=Number(i.qtd)>0?Number(i.qtd):1;const peca=i.tipoTxt||pecaDoItem(item);if(!bucket[peca])bucket[peca]={peca,qtd:0,graus:new Set(),refs:new Set()};bucket[peca].qtd+=q;if(i.grauTxt)bucket[peca].graus.add(i.grauTxt);bucket[peca].refs.add(`${e.codigo} · Montante ${m.numero}`);});
+    estruturaAnomalyOccurrences(e).forEach(({it,oc})=>{const q=Number(oc.qtd)>0?Number(oc.qtd):1;const peca=oc.tipoTxt||it.peca;if(!bucket[peca])bucket[peca]={peca,qtd:0,graus:new Set(),refs:new Set()};bucket[peca].qtd+=q;if(oc.grauTxt)bucket[peca].graus.add(oc.grauTxt);bucket[peca].refs.add(`${e.codigo} · ${oc.montanteRef||"estrutura"}`);});
   });
   return Object.values(bucket);
 }
@@ -3360,23 +4388,25 @@ function buildIndicadores(v) {
 
   estruturas.forEach((e) => {
     (e.montantes || []).forEach((m) => {
-      m.itens.filter((it) => itemAplicavel(it, e)).forEach((it) => {
+      visualItemsMontante(m, e).forEach((it) => {
         totalItensAplicaveis++;
         const stItem = montanteItemStatus(it);
         if (stItem === "ok" || stItem === "naoaplica") totalItensConformes++;
-        const probs=(it.ocorrencias||[]).filter((oc)=>ocorrenciaStatus(oc,it)==="problema");
-        if(probs.length){probs.forEach((oc)=>{totalApontamentos++;const key=(it.codigo?it.codigo+" — ":"")+it.nome;anomaliaCount[key]=(anomaliaCount[key]||0)+1;if(oc.grauTxt){const g=oc.grauTxt.trim().toUpperCase();grauCount[g]=(grauCount[g]||0)+1;}totalFotos+=occurrencePhotos(oc).length;});}
-        else if(isProblem(stItem)){totalApontamentos++;const key=(it.codigo?it.codigo+" — ":"")+it.nome;anomaliaCount[key]=(anomaliaCount[key]||0)+1;totalFotos+=occurrencePhotos(it).length;}
       });
     });
-    (e.itensEstrutura || []).forEach((it) => {
-      (it.ocorrencias || []).filter((oc) => ocorrenciaStatus(oc,it) === "problema").forEach((oc) => {
-        totalApontamentos++;
-        const key = (it.codigo ? it.codigo + " — " : "") + it.nome;
-        anomaliaCount[key] = (anomaliaCount[key] || 0) + 1;
-        if (oc.grauTxt) { const g = oc.grauTxt.trim().toUpperCase(); grauCount[g] = (grauCount[g] || 0) + 1; }
-        totalFotos += occurrencePhotos(oc).length;
-      });
+    montanteAnomalyEntries(e).forEach(({ item, oc, i }) => {
+      totalApontamentos++;
+      const key = (item.codigo ? item.codigo + " — " : "") + item.nome;
+      anomaliaCount[key] = (anomaliaCount[key] || 0) + 1;
+      if (i.grauTxt) { const g = i.grauTxt.trim().toUpperCase(); grauCount[g] = (grauCount[g] || 0) + 1; }
+      totalFotos += occurrencePhotos(oc || item).length;
+    });
+    estruturaAnomalyOccurrences(e).forEach(({ it, oc }) => {
+      totalApontamentos++;
+      const key = (it.codigo ? it.codigo + " — " : "") + it.nome;
+      anomaliaCount[key] = (anomaliaCount[key] || 0) + 1;
+      if (oc.grauTxt) { const g = oc.grauTxt.trim().toUpperCase(); grauCount[g] = (grauCount[g] || 0) + 1; }
+      totalFotos += occurrencePhotos(oc).length;
     });
   });
 
@@ -3552,7 +4582,7 @@ function buildPartsByLocation() {
   state.vistorias.filter((v) => v.finalizada).forEach((v) => {
     const key = v.lojaCd || "(sem Loja/CD)";
     (v.estruturas || []).filter((e) => !e.resolvido && isProblem(estruturaStatus(e))).forEach((e) => {
-      montanteProblemEntries(e).forEach(({m,item,i}) => {
+      montanteAnomalyEntries(e).forEach(({m,item,i}) => {
         const q = Number(i.qtd) > 0 ? Number(i.qtd) : 1;
         const peca = i.tipoTxt || pecaDoItem(item);
         if (!locations[key]) locations[key] = { local: v.local, itens: {} };
@@ -3562,8 +4592,7 @@ function buildPartsByLocation() {
         if (i.grauTxt) bucket[peca].graus.add(i.grauTxt);
         bucket[peca].refs.add(`${e.codigo} · Montante ${m.numero}`);
       });
-      estruturaProblemOccurrences(e).forEach(({it,oc}) => {
-        if (it.tipo === "medicao") return;
+      estruturaAnomalyOccurrences(e).forEach(({it,oc}) => {
         const q = Number(oc.qtd) > 0 ? Number(oc.qtd) : 1;
         const peca = oc.tipoTxt || it.peca;
         if (!locations[key]) locations[key] = { local: v.local, itens: {} };
@@ -3870,11 +4899,22 @@ function ConfigScreen() {
       modal.setStep("Gravando transação no IndexedDB...");
       await idbTransactionApply(items, allToDelete);
       await persistVistoriaList();
+      // Backups pré-v2.18 trazem fotos em base64 embutido (sem "photos" no manifesto). Antes, isso só
+      // era convertido no PRÓXIMO boot do app — até lá, a vistoria restaurada ficava com o JSON inchado
+      // de base64 mesmo sem o usuário perceber. Agora a migração roda aqui mesmo, na hora.
+      modal.setStep("Migrando fotos legadas (base64 -> Blob), se houver...");
+      await migrateLegacyBase64ToPhotos();
+      // migrateLegacyBase64ToPhotos() escreve direto no IndexedDB, por fora de state.vistorias — sem
+      // recarregar aqui, a lista em memória ficaria descompassada do banco (ainda mostrando as fotos
+      // pré-migração) até algum outro refresh não relacionado acontecer.
+      await persistVistoriaList();
       modal.setStep("Verificando integridade pós-restauração...");
       const postInteg = await checkPhotoIntegrity(await idbGetAll("vistorias"));
       modal.close();
-      if (postInteg.isClean) {
+      if (postInteg.isClean && !postInteg.pendingMigration.length) {
         alert(`Backup restaurado com sucesso! ${data.vistorias.length} inspeção(ões) restaurada(s) com 100% de integridade.\nO backup de segurança do estado anterior foi baixado.`);
+      } else if (postInteg.isClean && postInteg.pendingMigration.length) {
+        alert(`Backup restaurado com sucesso! ${data.vistorias.length} inspeção(ões) restaurada(s).\n${postInteg.pendingMigration.length} foto(s) legada(s) ainda não puderam ser migradas automaticamente (dado corrompido no arquivo de origem) — a inspeção continua utilizável, mas verifique a tela Saúde dos dados.\nO backup de segurança do estado anterior foi baixado.`);
       } else {
         alert(`Backup restaurado com atenção: ${postInteg.missing.length} inconsistência(s) detectada(s). Verifique a tela Saúde dos dados.`);
       }
