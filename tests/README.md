@@ -67,6 +67,7 @@ Sem dependências externas (não usa `npm install` — só Node.js 18+ built-in)
 | `test28_audit_fixes_p1_antigravity.js` | Teste de correção entregue pelo Antigravity pra P1-1/P1-2/P1-3 (arquivo original `test23_audit_fixes_p1.js`, renomeado aqui só pra não colidir com o `test23` já existente da auditoria independente — nenhum teste foi descartado na reconciliação) |
 | `test29_reauditoria_p1_completa.js` | Re-auditoria fechada pós-hardening: as 4 combinações de `podeEntrarNoPrumo` (legado/null/true/false) via dashboard, persistir/reabrir, reabilitar Prumo depois de desabilitar com dados antigos intactos, anomalia Visual real preservada em todos os canais |
 | `test30_auditoria_h6_montanteItemStatus.js` | Auditoria da reordenação em `montanteItemStatus()`: prova que o estado contraditório é inalcançável via `normalizeMontanteItem` no fluxo real, zero regressão em cenários Visual comuns, mudança não necessária pros P1 (recomendação: reverter por disciplina de diff mínimo, não por bug ativo) |
+| `test31_simulacao_campo_10e_80m.js` | **Simulação de campo ponta a ponta:** 10 estruturas / 80 montantes, seed reproduzível, seguindo a sequência real de um técnico (Visual → Prumo → Lux → Finalizar → fechar/reabrir → Relatório/CSV/BOM). Exercita, tudo junto e na ordem real, todas as regras validadas isoladamente nos testes anteriores: liberação de Prumo por estrutura, "Sem acesso", eixos divergentes L/T, Lux Método A/B, estruturas "Sem iluminação", finalização condicionada, persistência, e ausência de contaminação Lux→anomalia/BOM. Robusto testado em 5 seeds diferentes antes de fixar a seed de referência. |
 
 ## Gerador de dados pra teste manual no navegador
 
@@ -83,6 +84,16 @@ node tools/gerar-fixture-72m-30e.js > tools/fixture-72m-30e.json
 Validado neste harness antes de entregar (restaura sem erro, reidrata corretamente, catálogo de 44 itens por
 montante intacto, integridade 100%).
 
+## Testes 31-35 (simulação de campo, correção do P0 de anomalia perdida, motor de PDF)
+
+| Arquivo | O que valida |
+|---|---|
+| `test31_simulacao_campo_10e_80m.js` | Simulação de campo ponta a ponta: 10 estruturas / 80 montantes, sequência real Visual→Prumo→Lux→Finalizar→fechar/reabrir→Relatório/CSV/BOM, seed reproduzível |
+| `test32_auditoria_foto_orfa.js` | **Documenta o bug ORIGINAL** de campo (linha de base, sem a correção do draft persistente): foto tirada + interrupção antes de "Salvar anomalia" = ocorrência perdida + foto órfã. Não invoca a restauração de propósito — é o "antes" |
+| `test33_correcao_draft_persistente.js` | **Prova a correção do P0**: Cenário A (reload/restauração/Save → M2 aparece certo no relatório), Cenário B (Cancelar → nem ocorrência oficial nem foto órfã), + unitários (foto legítima, foto órfã, draft sobrevive a background, save/cancel limpam o rascunho) |
+| `test34_pdf_engine.js` | Motor de PDF real (`buildInspectionPdf`/`prepareInspectionPdf`): assinatura `%PDF-`, zero/uma/múltiplas fotos, múltiplos montantes, conteúdo grande (várias páginas), foto que falha não aborta o relatório, `loadJsPdf()` sem rede, nome de arquivo seguro, geração repetida sem contaminação de estado |
+| `test35_regressao_pdf_campo_real.js` | **Teste de regressão obrigatório**: reproduz o caso real de campo inteiro (1 estrutura/2 montantes, ambos com anomalia+foto via fluxo real de `NewAnomalyScreen`, Visual+Prumo concluídos, Lux desabilitado, finalizar) até gerar o PDF real, confirmando M1/M2/2 anomalias/2 evidências/zero órfãs/PDF válido |
+
 ## Convenções importantes pra escrever novos testes
 
 - **Reconciliação de catálogo:** `normalizeVistoria()` intercala itens sintéticos de teste com o catálogo
@@ -95,3 +106,11 @@ montante intacto, integridade 100%).
   atributo.
 - **Chaos é global por disco:** `disk.__chaos.failAfterPuts` conta puts em qualquer store, de qualquer
   transação, desde a criação daquele `indexedDB` mock — sempre desarme (`= null`) depois do teste.
+- **Referências ficam obsoletas depois de `normalizeVistoria`/`saveVistoriaObject`:** qualquer chamada que
+  rode `normalizeVistoria` (inclusive em background, como `startNewAnomaly` agora faz) substitui os objetos
+  de item por clones novos — nunca segure uma referência de `item`/`oc` através dessas chamadas; rebusque
+  por id depois.
+- **`window.jspdf.jsPDF` já vem pré-populado no harness** (`load-app.js`) com um jsPDF falso mas fiel —
+  gera bytes de PDF genuinamente válidos (`%PDF-...%%EOF`), suficiente pra testar a orquestração real de
+  `buildInspectionPdf` sem precisar de um navegador de verdade. Não é o jsPDF real — não use pra validar
+  layout/renderização visual, só estrutura/conteúdo/resiliência a erro.

@@ -1,4 +1,4 @@
-const CACHE_NAME = "inspecao-pp-v2.19.0-rc1";
+const CACHE_NAME = "inspecao-pp-v2.20.0-rc1";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -9,6 +9,7 @@ const APP_SHELL = [
   "./icon-512.png",
   "./apple-touch-icon.png",
   "./logo-full.png",
+  "./vendor/jspdf.umd.min.js",
 ];
 
 self.addEventListener("install", (event) => {

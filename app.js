@@ -85,8 +85,8 @@ const DEFAULT_ITEMS = [
   { id: "iluminacao", codigo: "9.45", categoria: "Iluminação", familia: "Ambiente e Iluminação", nivel: "estrutura", nome: "Aferição de iluminação nos corredores", tipo: "medicao", unidade: "lux", min: 200, peca: "Aferição de iluminação nos corredores" },
   { id: "lux", codigo: "9.45", categoria: "Iluminação", familia: "Ambiente e Iluminação", nivel: "montante", nome: "Aferição de iluminação no montante", tipo: "medicao", unidade: "lux", min: 200, peca: "Aferição de iluminação no montante" },
 ];
-const APP_VERSION = "2.19.0-RC1";
-const APP_VERSION_DATE = "02/09/2026";
+const APP_VERSION = "2.20.0-RC1";
+const APP_VERSION_DATE = "04/09/2026";
 const CATALOG_VERSION = 5;
 const DEFAULT_CONFIG = {
   empresa: "Minha Empresa",
@@ -158,6 +158,10 @@ function touchOccurrenceFull(oc, item, e) {
   if (e) touchStage(e, stageForItem(item));
 }
 function touchItem(it) { if (it) { it.updatedAt = nowIso(); it.deviceOrigin = getDeviceId(); } return it; }
+// v2.19.1: atualiza o timestamp do rascunho de recuperação (não do conteúdo — esse já é a MESMA
+// referência de objeto usada em state.draftOccurrence, então já muda sozinho). Só marca "quando foi
+// a última vez que este rascunho recebeu atenção", útil pra debug/auditoria futura.
+function touchDraftRecovery() { if (state.draftVistoria && state.draftVistoria.draftOccurrenceRecovery) state.draftVistoria.draftOccurrenceRecovery.updatedAt = nowIso(); }
 function touchStage(e, stage) { if (e) { e[stage + "UpdatedAt"] = nowIso(); e[stage + "DeviceOrigin"] = getDeviceId(); } return e; }
 function ensureTombstones(v) {
   v.tombstones = v.tombstones || { estruturas: {}, montantes: {}, ocorrencias: {}, photos: {} };
@@ -626,6 +630,10 @@ async function cancelDraftAnomaly() {
   }
   const level = d.level || "montante";
   state.draftOccurrence = null;
+  if (state.draftVistoria && state.draftVistoria.draftOccurrenceRecovery) {
+    delete state.draftVistoria.draftOccurrenceRecovery;
+    await saveVistoriaNow();
+  }
   if (level === "estrutura" && !state.activeMontanteId) return go("estrutura", state.draftVistoria.id, state.activeEstruturaId);
   go("montante", state.draftVistoria.id, state.activeEstruturaId, state.activeMontanteId);
 }
@@ -1711,6 +1719,7 @@ async function checkPhotoIntegrity(vistorias) {
   const missing = [];
   const valid = [];
   const pendingMigration = [];
+  const referencedIds = new Set(); // v2.19.1: acumula todo photoId realmente referenciado por alguma ocorrência viva, pra detecção reversa (Blob->referência) logo abaixo.
 
   const checkRefs = (oc, vId, context) => {
     for (const pid of occurrencePhotoRefs(oc)) {
@@ -1723,6 +1732,7 @@ async function checkPhotoIntegrity(vistorias) {
         continue;
       }
       if (pid && pid.startsWith("pho_")) {
+        referencedIds.add(pid);
         const rec = photoMap.get(pid);
         const hasValidBlob = rec && rec.blob && (rec.blob.size > 0 || (rec.blob.byteLength && rec.blob.byteLength > 0));
         if (hasValidBlob) {
@@ -1756,9 +1766,24 @@ async function checkPhotoIntegrity(vistorias) {
       }
     }
   }
-  // isClean continua significando "sem Blob ausente/corrompido" (não muda o contrato usado por
-  // downloadZipBackup etc.) — pendingMigration é informação NOVA e aditiva, nunca torna isClean=false.
-  return { totalValid: valid.length, missing, pendingMigration, isClean: missing.length === 0 };
+
+  // v2.19.1 — detecção reversa (Blob -> referência): um Blob ativo no store "photos" que NENHUMA
+  // ocorrência viva referencia é uma foto órfã (ex: rascunho de anomalia interrompido antes de
+  // "Salvar anomalia" — ver draftOccurrenceRecovery). Só chega aqui com segurança porque todo call
+  // site real desta função sempre passa o conjunto COMPLETO de vistorias (idbGetAll("vistorias")) —
+  // uma chamada com um subconjunto geraria falso positivo aqui.
+  // Propositalmente ADITIVO: não apaga nada (sem GC automático nesta fase) e NÃO altera isClean —
+  // isClean continua significando estritamente "sem evidência referenciada ausente/corrompida"
+  // (o que de fato bloqueia downloadZipBackup); uma foto órfã é dado extra não referenciado, não
+  // evidência perdida, então não faz sentido bloquear backup por causa dela.
+  const orphaned = [];
+  for (const rec of allPhotos) {
+    if (!referencedIds.has(rec.id)) {
+      orphaned.push({ photoId: rec.id, vistoriaId: rec.vistoriaId, occurrenceId: rec.occurrenceId });
+    }
+  }
+
+  return { totalValid: valid.length, missing, pendingMigration, orphaned, isClean: missing.length === 0 };
 }
 
 /* ---------------- IndexedDB v4 ---------------- */
@@ -2241,9 +2266,28 @@ function startFirstVisualMontante(v, e) {
 }
 
 
+// v2.19.1 — restaura um rascunho de anomalia interrompido, se existir, ao (re)carregar a vistoria.
+// NUNCA vira anomalia oficial sozinho — só reabre a MESMA tela (NewAnomalyScreen) com os dados e fotos
+// já preenchidos, pro técnico revisar e decidir (Salvar anomalia ou Cancelar). Retorna true se restaurou.
+function restoreDraftOccurrenceIfAny(v) {
+  const rec = v && v.draftOccurrenceRecovery;
+  if (!rec) return false;
+  const e = (v.estruturas || []).find((x) => x.id === rec.estruturaId);
+  if (!e) { delete v.draftOccurrenceRecovery; return false; } // estrutura sumiu (ex: excluída em outro aparelho) -- descarta com segurança, sem tentar restaurar
+  const m = rec.montanteId ? (e.montantes || []).find((x) => x.id === rec.montanteId) : null;
+  state.draftOccurrence = { level: rec.level, itemId: rec.itemId, occurrence: rec.occurrence };
+  state.screen = "newAnomaly";
+  state.activeVistoriaId = v.id;
+  state.activeEstruturaId = e.id;
+  state.activeMontanteId = m ? m.id : null;
+  state.activeEstItemId = rec.level === "estrutura" ? rec.itemId : null;
+  state.activeChecklistItemId = rec.level === "montante" ? rec.itemId : null;
+  return true;
+}
 async function resumeVistoria(v) {
   const loaded = await idbGet("vistorias", v.id);
   state.draftVistoria = normalizeVistoria(loaded || v);
+  if (restoreDraftOccurrenceIfAny(state.draftVistoria)) { render(); return; }
   const r = state.draftVistoria.resume;
   if (!r || !r.estruturaId) return go("vistoria", v.id);
   const e = (state.draftVistoria.estruturas || []).find((x)=>x.id===r.estruturaId);
@@ -2469,7 +2513,7 @@ function estruturaStatus(e) {
 async function ensureVistoria(id) {
   if (id) {
     const existing = await idbGet("vistorias", id);
-    if (existing) { state.draftVistoria = normalizeVistoria(existing); return; }
+    if (existing) { state.draftVistoria = normalizeVistoria(existing); restoreDraftOccurrenceIfAny(state.draftVistoria); return; }
   }
   if (state.draftVistoria && !state.draftVistoria.finalizada && !id) return;
   state.draftVistoria = newVistoriaSkeleton();
@@ -3001,6 +3045,13 @@ function startNewAnomaly(v,e,m,item,seed=null,level="montante") {
   occurrence.status = "problema";
   if (level === "estrutura" && m && !occurrence.montanteRef) occurrence.montanteRef = `Montante ${m.numero}`;
   state.draftOccurrence = { level, itemId:item.id, occurrence };
+  // v2.19.1: rascunho de RECUPERAÇÃO, persistido junto da vistoria (mesma persistência já existente —
+  // sem Object Store novo). "occurrence" é a MESMA referência de objeto usada em state.draftOccurrence,
+  // então qualquer edição de campo ou foto adicionada/removida já fica refletida aqui automaticamente,
+  // sem precisar duplicar lógica de propagação em cada callback. Isolado de item.ocorrencias — nunca
+  // aparece em progresso/relatório/BOM/CSV, porque nenhuma dessas funções lê este campo.
+  v.draftOccurrenceRecovery = { estruturaId: e.id, montanteId: m ? m.id : null, itemId: item.id, level, occurrence, updatedAt: nowIso() };
+  saveVistoriaObject(v).catch(() => {});
   state.itemDetailReturn = null;
   go("newAnomaly",v.id,e.id,m ? m.id : null,level === "estrutura" ? item.id : null,level === "montante" ? item.id : null);
 }
@@ -3016,16 +3067,16 @@ function NewAnomalyScreen() {
   wrap.appendChild(el("div",{class:"draft-banner"},"Rascunho — só entra na inspeção depois de Salvar anomalia."));
   const err=el("div",{class:"form-error",style:"display:none;margin-top:10px"}); wrap.appendChild(err);
   const card=Card({class:"occurrence-card touch-anomaly-card",style:"margin-top:12px"});
-  if(level==="estrutura") card.appendChild(choiceOrCustomField("Montante / posição de referência",oc.montanteRef||"",(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero).map((x)=>`Montante ${x.numero}`),(val)=>{oc.montanteRef=val;},"Ex: Centro do corredor"));
-  if(item.descOpcoes)card.appendChild(choiceOrCustomField("Descrição",oc.descTxt,item.descOpcoes,(val)=>{oc.descTxt=val;},"Digite a descrição"));
-  if(item.tipoOpcoes)card.appendChild(choiceOrCustomField("Tipo / componente",oc.tipoTxt,item.tipoOpcoes,(val)=>{oc.tipoTxt=val;},"Digite o tipo"));
-  if(item.localOpcoes)card.appendChild(choiceOrCustomField(item.localLabel||"Localização",oc.localTxt,item.localOpcoes,(val)=>{oc.localTxt=val;},"Digite a localização"));
-  card.appendChild(choiceOrCustomField("Grau",oc.grauTxt,GRAU_OPCOES,(val)=>{oc.grauTxt=val;},"Digite o grau"));
-  const compact=el("div",{class:"anomaly-number-grid"}); const nivel=inputEl(oc.corte||"",(val)=>{oc.corte=val;},"Ex: 1 / 3 / 18"); nivel.enterKeyHint="next"; compact.appendChild(Field("Nível / posição",nivel)); compact.appendChild(Field("Quantidade",inputEl(oc.qtd==null?1:oc.qtd,(val)=>{oc.qtd=val;},"1","number"))); card.appendChild(compact);
-  const optional=el("details",{class:"anomaly-optional"}); optional.appendChild(el("summary",{},"＋ Observação (opcional)")); const obs=el("textarea",{class:"input",rows:2,placeholder:"Observação adicional"}); obs.value=oc.obs||""; obs.addEventListener("input",()=>{oc.obs=obs.value;}); optional.appendChild(obs); card.appendChild(optional);
+  if(level==="estrutura") card.appendChild(choiceOrCustomField("Montante / posição de referência",oc.montanteRef||"",(e.montantes||[]).slice().sort((a,b)=>a.numero-b.numero).map((x)=>`Montante ${x.numero}`),(val)=>{oc.montanteRef=val;touchDraftRecovery();saveVistoriaDebounced();},"Ex: Centro do corredor"));
+  if(item.descOpcoes)card.appendChild(choiceOrCustomField("Descrição",oc.descTxt,item.descOpcoes,(val)=>{oc.descTxt=val;touchDraftRecovery();saveVistoriaDebounced();},"Digite a descrição"));
+  if(item.tipoOpcoes)card.appendChild(choiceOrCustomField("Tipo / componente",oc.tipoTxt,item.tipoOpcoes,(val)=>{oc.tipoTxt=val;touchDraftRecovery();saveVistoriaDebounced();},"Digite o tipo"));
+  if(item.localOpcoes)card.appendChild(choiceOrCustomField(item.localLabel||"Localização",oc.localTxt,item.localOpcoes,(val)=>{oc.localTxt=val;touchDraftRecovery();saveVistoriaDebounced();},"Digite a localização"));
+  card.appendChild(choiceOrCustomField("Grau",oc.grauTxt,GRAU_OPCOES,(val)=>{oc.grauTxt=val;touchDraftRecovery();saveVistoriaDebounced();},"Digite o grau"));
+  const compact=el("div",{class:"anomaly-number-grid"}); const nivel=inputEl(oc.corte||"",(val)=>{oc.corte=val;touchDraftRecovery();saveVistoriaDebounced();},"Ex: 1 / 3 / 18"); nivel.enterKeyHint="next"; compact.appendChild(Field("Nível / posição",nivel)); compact.appendChild(Field("Quantidade",inputEl(oc.qtd==null?1:oc.qtd,(val)=>{oc.qtd=val;touchDraftRecovery();saveVistoriaDebounced();},"1","number"))); card.appendChild(compact);
+  const optional=el("details",{class:"anomaly-optional"}); optional.appendChild(el("summary",{},"＋ Observação (opcional)")); const obs=el("textarea",{class:"input",rows:2,placeholder:"Observação adicional"}); obs.value=oc.obs||""; obs.addEventListener("input",()=>{oc.obs=obs.value;touchDraftRecovery();saveVistoriaDebounced();}); optional.appendChild(obs); card.appendChild(optional);
   const photos=el("div",{style:"margin-top:10px"}); renderPhotoArea(photos,oc); card.appendChild(photos); wrap.appendChild(card);
   const actions=el("div",{class:"draft-actions"}); const cancel=el("button",{class:"ghost-btn touch-btn"},"Cancelar"); cancel.addEventListener("click",cancelDraftAnomaly);
-  const save=el("button",{class:"field-next-btn"},"✓ Salvar anomalia"); save.addEventListener("click",async()=>{if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();const msg=validateAnomalyOccurrence(oc,item);if(msg){err.textContent=msg;err.style.display="block";err.scrollIntoView({block:"center"});return;}item.ocorrencias=item.ocorrencias||[];item.ocorrencias.push(touchOccurrence(normalizeOccurrence(oc,item,"problema")));if(level==="montante"){item.status="problema";syncMontanteItemStatus(item);touchItem(item);touchStage(e,"visual");}else{item.revisado=true;touchItem(item);touchStage(e,"visual");}state.draftOccurrence=null;await saveVistoriaNow();if(level==="estrutura"&&!m)return go("estrutura",v.id,e.id);go("montante",v.id,e.id,m.id);});
+  const save=el("button",{class:"field-next-btn"},"✓ Salvar anomalia"); save.addEventListener("click",async()=>{if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();const msg=validateAnomalyOccurrence(oc,item);if(msg){err.textContent=msg;err.style.display="block";err.scrollIntoView({block:"center"});return;}item.ocorrencias=item.ocorrencias||[];item.ocorrencias.push(touchOccurrence(normalizeOccurrence(oc,item,"problema")));if(level==="montante"){item.status="problema";syncMontanteItemStatus(item);touchItem(item);touchStage(e,"visual");}else{item.revisado=true;touchItem(item);touchStage(e,"visual");}state.draftOccurrence=null;delete v.draftOccurrenceRecovery;await saveVistoriaNow();if(level==="estrutura"&&!m)return go("estrutura",v.id,e.id);go("montante",v.id,e.id,m.id);});
   actions.appendChild(cancel); actions.appendChild(save); wrap.appendChild(actions); return wrap;
 }
 function MontanteScreen() {
@@ -3773,18 +3824,33 @@ function HistoryScreen() {
 }
 
 /* ---------------- Relatório ---------------- */
-/* ---------------- Geração de PDF sob demanda (para o envio por e-mail) ---------------- */
+/* ---------------- Geração de PDF sob demanda (Baixar/PDF e Compartilhar usam o mesmo motor) ---------------- */
 let jsPdfLoadPromise = null;
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Falha ao carregar " + src));
+    document.head.appendChild(script);
+  });
+}
+// v2.19.2: tenta o jsPDF vendorizado localmente (./vendor/jspdf.umd.min.js — pré-cacheado no APP_SHELL
+// do service worker, funciona offline/modo avião desde a primeira instalação). O CDN só entra como
+// fallback de última instância (ex: arquivo local ainda não foi vendorizado, ou instalação antiga do
+// app antes deste arquivo existir no cache) — nunca é necessário pro funcionamento normal.
 function loadJsPdf() {
   if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve(window.jspdf.jsPDF);
   if (jsPdfLoadPromise) return jsPdfLoadPromise;
-  jsPdfLoadPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
-    script.onload = () => resolve(window.jspdf.jsPDF);
-    script.onerror = () => reject(new Error("Não foi possível carregar o gerador de PDF (precisa de internet na primeira vez)."));
-    document.head.appendChild(script);
-  });
+  jsPdfLoadPromise = (async () => {
+    try { await loadScriptOnce("./vendor/jspdf.umd.min.js"); } catch (e) { /* segue pro CDN abaixo */ }
+    if (!(window.jspdf && window.jspdf.jsPDF)) {
+      // Local não carregou OU carregou mas não definiu jsPDF (ex: placeholder ainda não substituído).
+      await loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+    }
+    if (!(window.jspdf && window.jspdf.jsPDF)) throw new Error("Gerador de PDF carregado, mas jsPDF não ficou disponível.");
+    return window.jspdf.jsPDF;
+  })().catch((err) => { jsPdfLoadPromise = null; throw new Error("Não foi possível carregar o gerador de PDF: " + (err && err.message || "sem internet e o arquivo local ainda não foi instalado")); });
   return jsPdfLoadPromise;
 }
 function imageUrlToDataUrl(url) {
@@ -3952,6 +4018,14 @@ async function buildInspectionPdf(v) {
 
   return doc.output("blob");
 }
+// v2.19.2: motor único compartilhado por "Baixar / PDF" e "Compartilhar" — os dois pedem exatamente o
+// mesmo Blob PDF real (via buildInspectionPdf) e o mesmo nome de arquivo, em vez de cada botão ter sua
+// própria implementação. Lança se a geração falhar — quem chama decide como mostrar o erro.
+async function prepareInspectionPdf(v) {
+  const blob = await buildInspectionPdf(v);
+  const filename = `relatorio-${slug(v.lojaCd)}.pdf`;
+  return { blob, filename };
+}
 
 
 function InspectionHubScreen() {
@@ -4085,40 +4159,51 @@ function ReportScreen() {
   const row1 = el("div", { class: "row" });
   const btnPdf = el("button", { class: "action-btn", style: "background:var(--ink);color:#fff" }, el("span", { html: svg("download", 16) }), " Baixar / PDF");
   btnPdf.addEventListener("click", async () => {
+    if (btnPdf.disabled) return; // impede duplo clique
     btnPdf.disabled = true;
     const oldHtml = btnPdf.innerHTML;
-    btnPdf.innerHTML = "Preparando laudo em alta resolução…";
+    btnPdf.innerHTML = "Gerando PDF...<br><small style=\"font-weight:400\">Preparando evidências</small>";
     try {
-      const reportImgs = Array.from(printable.querySelectorAll("img[data-photo-id]"));
-      await Promise.all(reportImgs.map(async (img) => {
-        const photoId = img.dataset.photoId;
-        const context = img.dataset.context || "";
-        if (photoId) {
-          const highResUrl = await loadPhotoDataUrl(photoId, context);
-          if (highResUrl) {
-            img.src = highResUrl;
-            if (img.decode) await img.decode().catch(() => {});
-          }
-        }
-      }));
-      const allImgs = Array.from(printable.querySelectorAll("img"));
-      await Promise.all(allImgs.map((img) => {
-        if (img.complete) return img.decode ? img.decode().catch(() => {}) : Promise.resolve();
-        return new Promise((res) => {
-          img.onload = () => (img.decode ? img.decode().catch(() => {}).then(res) : res());
-          img.onerror = res;
-        });
-      }));
-    } catch (e) {
-      console.warn("Aviso ao preparar fotos para impressão:", e);
-    } finally {
-      btnPdf.disabled = false;
+      const { blob, filename } = await prepareInspectionPdf(v);
+      download(filename, blob, "application/pdf");
+      btnPdf.innerHTML = "✓ PDF gerado com sucesso";
+      setTimeout(() => { btnPdf.innerHTML = oldHtml; btnPdf.disabled = false; }, 1800);
+    } catch (err) {
+      console.error("Falha ao gerar PDF", err);
       btnPdf.innerHTML = oldHtml;
+      btnPdf.disabled = false;
+      alert("Não foi possível gerar o PDF. " + (err && err.message ? err.message : "Tente novamente.") + "\nToque em \"Baixar / PDF\" novamente para tentar de novo.");
     }
-    window.print();
   });
   const btnShare = el("button", { class: "action-btn", style: "background:#fff;color:var(--ink);border:1px solid var(--line)" }, el("span", { html: svg("share", 16) }), " Compartilhar");
-  btnShare.addEventListener("click", () => shareReport(v, st));
+  btnShare.addEventListener("click", async () => {
+    if (btnShare.disabled) return;
+    btnShare.disabled = true;
+    const oldHtml = btnShare.innerHTML;
+    btnShare.innerHTML = "Gerando PDF...<br><small style=\"font-weight:400\">Preparando evidências</small>";
+    try {
+      const { blob, filename } = await prepareInspectionPdf(v);
+      const file = new File([blob], filename, { type: "application/pdf" });
+      const shareData = { title: `Relatório — ${v.lojaCd}`, text: `Relatório de inspeção — ${v.lojaCd}${v.local ? ", " + v.local : ""} — ${fmtDateOnly(v.data)}`, files: [file] };
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share(shareData);
+      } else if (navigator.share) {
+        download(filename, blob, "application/pdf");
+        await navigator.share({ title: shareData.title, text: shareData.text + "\n\n(O PDF foi baixado no aparelho — anexe manualmente.)" });
+      } else {
+        download(filename, blob, "application/pdf");
+        alert("O PDF foi baixado no aparelho. Anexe-o manualmente no seu app de mensagens/e-mail.");
+      }
+      btnShare.innerHTML = "✓ PDF gerado com sucesso";
+      setTimeout(() => { btnShare.innerHTML = oldHtml; btnShare.disabled = false; }, 1800);
+    } catch (err) {
+      if (err && err.name === "AbortError") { btnShare.innerHTML = oldHtml; btnShare.disabled = false; return; } // usuário cancelou o compartilhamento nativo
+      console.error("Falha ao preparar compartilhamento", err);
+      btnShare.innerHTML = oldHtml;
+      btnShare.disabled = false;
+      alert("Não foi possível gerar o PDF para compartilhar. " + (err && err.message ? err.message : "Tente novamente."));
+    }
+  });
   row1.appendChild(btnPdf); row1.appendChild(btnShare);
   topActions.appendChild(row1);
   printable.appendChild(topActions);

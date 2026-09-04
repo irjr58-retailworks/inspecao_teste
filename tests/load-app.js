@@ -41,8 +41,10 @@ function loadApp(appJsPath, opts = {}) {
       querySelectorAll(sel) { return matchDescendant(node, sel, false); },
       classList: { add(){}, remove(){}, toggle(){} },
       remove() {},
+      scrollIntoView() {},
       click() { (node._listeners.click || []).forEach((fn) => fn({ target: node })); },
-      getContext() { return { drawImage(){} }; },
+      getContext() { return { drawImage(){}, fillRect(){}, fillText(){}, set fillStyle(v){}, set font(v){}, set textBaseline(v){} }; },
+      toDataURL() { return "data:image/jpeg;base64,AAA="; },
       toBlob(cb) { cb(new Blob([new Uint8Array([1,2,3])], { type: "image/jpeg" })); },
       set src(v) { this._src = v; if (this.onload) queueMicrotask(this.onload); },
       get src() { return this._src; },
@@ -80,9 +82,9 @@ function loadApp(appJsPath, opts = {}) {
     btoa: (s) => Buffer.from(s, "binary").toString("base64"),
     fetch: () => Promise.reject(new Error("fetch indisponível no harness de teste")),
     URL: { createObjectURL: () => "blob:mock", revokeObjectURL: () => {} },
-    Image: class { set src(v) { this._src = v; if (this.onload) queueMicrotask(this.onload); } },
+    Image: class { set src(v) { this._src = v; if (this.onload) queueMicrotask(this.onload); } get width(){return this._w||800;} set width(v){this._w=v;} get height(){return this._h||600;} set height(v){this._h=v;} },
     FileReader: class {
-      readAsDataURL(blob) { queueMicrotask(() => { this.result = "data:image/jpeg;base64,AAA="; if (this.onload) this.onload(); }); }
+      readAsDataURL(blob) { const self = this; queueMicrotask(() => { self.result = "data:image/jpeg;base64,AAA="; if (self.onload) self.onload({ target: self }); }); }
     },
     document: documentStub,
     navigator: { storage: { estimate: async () => ({ usage: 0, quota: 0 }), persist: async () => true, persisted: async () => true }, onLine: true },
@@ -90,6 +92,71 @@ function loadApp(appJsPath, opts = {}) {
     setTimeout, clearTimeout, queueMicrotask, Promise, Map, Set, JSON, Math, Date, Array, Object, String, Number, Boolean,
   };
   sandbox.window = sandbox;
+  sandbox.scrollTo = () => {};
+  // jsPDF falso, mas fiel o bastante pra testar buildInspectionPdf de verdade: implementa só a fatia de
+  // API que ele usa (setFontSize/setFont/setTextColor/splitTextToSize/text/addImage/addPage/pageSize/
+  // output). output("blob") produz um PDF MINIMAMENTE VÁLIDO de verdade (começa com %PDF, tem objetos,
+  // xref, trailer, %%EOF) -- não é decoração, dá pra checar a assinatura e o tamanho crescer com conteúdo.
+  class FakeJsPDF {
+    constructor(opts) {
+      this._pages = [[]]; // cada página é uma lista de "operações" (texto/imagem), só pra contagem/depuração
+      this._page = 0;
+      this._font = { size: 12, style: "normal", color: "#000" };
+      this.internal = {
+        pageSize: { getWidth: () => 595.28, getHeight: () => 841.89 }, // A4 em pt, igual ao jsPDF real
+      };
+    }
+    setFontSize(s) { this._font.size = s; return this; }
+    setFont(name, style) { this._font.style = style; return this; }
+    setTextColor(c) { this._font.color = c; return this; }
+    splitTextToSize(str, maxWidth) {
+      // Quebra simplificada por largura de caractere -- suficiente pra gerar múltiplas linhas/páginas quando o conteúdo é grande.
+      const str2 = String(str);
+      const charsPerLine = Math.max(10, Math.floor(maxWidth / (this._font.size * 0.5)));
+      const lines = [];
+      for (let i = 0; i < str2.length; i += charsPerLine) lines.push(str2.slice(i, i + charsPerLine));
+      return lines.length ? lines : [""];
+    }
+    text(lines, x, y) {
+      const arr = Array.isArray(lines) ? lines : [lines];
+      this._pages[this._page].push({ type: "text", text: arr.join("\n") });
+      return this;
+    }
+    addImage(data, format, x, y, w, h) {
+      if (!data) throw new Error("addImage: dado de imagem vazio");
+      this._pages[this._page].push({ type: "image", size: (data.length || 0) });
+      return this;
+    }
+    addPage() { this._pages.push([]); this._page++; return this; }
+    output(type) {
+      // Monta um PDF de verdade, mínimo mas byte-válido: cabeçalho, 1 objeto de conteúdo por página
+      // (com o texto/contagem de imagens embutido como comentário, só pra inspeção), xref, trailer.
+      const objs = [];
+      objs.push("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+      const kids = this._pages.map((_, i) => `${3 + i} 0 R`).join(" ");
+      objs.push(`2 0 obj\n<< /Type /Pages /Kids [${kids}] /Count ${this._pages.length} >>\nendobj\n`);
+      this._pages.forEach((ops, i) => {
+        const summary = ops.map((o) => (o.type === "text" ? `% TEXT:${(o.text||"").length}chars` : `% IMG:${o.size}bytes`)).join("\n");
+        const content = `BT /F1 12 Tf (page ${i + 1}) Tj ET\n${summary}`;
+        objs.push(`${3 + i} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents ${3 + this._pages.length + i} 0 R >>\nendobj\n`);
+      });
+      this._pages.forEach((ops, i) => {
+        const summary = ops.map((o) => (o.type === "text" ? `% TEXT:${(o.text||"").length}chars` : `% IMG:${o.size}bytes`)).join("\n");
+        const stream = `BT /F1 12 Tf (page ${i + 1}) Tj ET\n${summary}`;
+        objs.push(`${3 + this._pages.length + i} 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`);
+      });
+      let body = "%PDF-1.4\n";
+      const offsets = [];
+      for (const o of objs) { offsets.push(body.length); body += o; }
+      const xrefStart = body.length;
+      body += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+      offsets.forEach((off) => { body += String(off).padStart(10, "0") + " 00000 n \n"; });
+      body += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+      if (type === "blob") return new Blob([body], { type: "application/pdf" });
+      return body;
+    }
+  }
+  sandbox.jspdf = { jsPDF: FakeJsPDF };
   sandbox.crypto = webcrypto;
   sandbox.self = sandbox;
   sandbox.global = sandbox;
@@ -130,7 +197,11 @@ function loadApp(appJsPath, opts = {}) {
     "buildPartsForVistoria", "buildPartsByLocation", "buildAnomaliaRows", "resumeVistoria", "PrumoScreen",
     "saveVistoriaObject", "montanteItemStatus", "ocorrenciaStatus", "statusFromMedicao", "context",
     "estruturaMedicoesInformativas", "visualItemsMontante", "LuxScreen",
-    "montanteProblemEntries", "estruturaProblemOccurrences",
+    "montanteProblemEntries", "estruturaProblemOccurrences", "syncMontanteItemStatus", "nowIso",
+    "startNewAnomaly", "NewAnomalyScreen", "cancelDraftAnomaly", "newOcorrencia", "PhotoUrlManager",
+    "buildInspectionPdf", "resizeImageToBlob", "touchDraftRecovery", "restoreDraftOccurrenceIfAny",
+    "newEstruturaSkeleton", "newMontanteSkeleton", "ensureVistoria", "prepareInspectionPdf", "loadJsPdf",
+    "vistoriaStatus", "buildAnomaliaRows",
   ];
   const shim = "\n;globalThis.__EXPORTS__ = {};\n" + exportNames.map((n) =>
     `try { globalThis.__EXPORTS__[${JSON.stringify(n)}] = ${n}; } catch (e) {}`

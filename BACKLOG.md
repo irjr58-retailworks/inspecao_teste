@@ -73,3 +73,23 @@ próxima vez que essa função for tocada por outro motivo (não vale abrir uma 
 - **P3 — mecanismo de risco do parâmetro default em `prumoProgress`/`luxProgress` (H5):** sem mudança desde a
   rodada anterior. Nenhum call site ativo afetado; risco latente pra código futuro, documentado, sem ação
   necessária agora.
+
+## REQ-005 — Correção do P0 de perda de anomalia + motor de PDF real (04/09/2026)
+
+- **P0 corrigido:** rascunho de anomalia (`state.draftOccurrence`) agora tem espelho persistente
+  (`v.draftOccurrenceRecovery`, mesma persistência da vistoria, sem Object Store novo). Reload/background/
+  bloqueio de tela não perdem mais a ocorrência em edição. Ver `test32` (bug original documentado) e
+  `test33` (correção provada).
+- **`checkPhotoIntegrity()`:** ganhou detecção reversa (`orphaned` — Blob sem ocorrência viva que o
+  referencie). Aditivo, não altera `isClean` (continua só sobre evidência ausente/corrompida — o que
+  realmente bloqueia backup). Sem GC automático nesta fase, só detecção/relatório.
+- **Botão "Baixar / PDF":** trocado de `window.print()` para `buildInspectionPdf(v)` real, via motor
+  compartilhado `prepareInspectionPdf(v)` (mesmo Blob usado por "Baixar" e "Compartilhar" agora).
+- **Pendência manual, não-bloqueante:** `vendor/jspdf.umd.min.js` está como placeholder — minha ferramenta
+  de busca truncou o arquivo real de 356KB nas duas tentativas. `loadJsPdf()` já detecta isso e cai
+  automaticamente pro CDN (não quebra nada agora), mas a garantia de "100% offline desde a instalação
+  limpa" só vale depois que alguém, numa máquina com internet normal, baixar o arquivo real e substituir o
+  placeholder (instruções em `vendor/README.md` — é literalmente um `curl` de uma linha).
+- **P3 — código morto:** `shareReport(v, st)` (resumo em texto, sem PDF) não é mais chamado por nenhum
+  botão desde que `btnShare` passou a usar `prepareInspectionPdf`. Deixado no arquivo por segurança (zero
+  risco de remover algo que talvez tenha outro uso não identificado) — remover na próxima limpeza geral.
